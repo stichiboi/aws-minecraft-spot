@@ -1,0 +1,12 @@
+node_modules/
+dist/
+cdk.out/
+
+mods/
+
+*.js
+!jest.config.js
+*.d.ts
+
+.env
+*.pem

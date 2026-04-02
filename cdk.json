@@ -1,0 +1,27 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/app.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "node_modules",
+      "dist",
+      "mods",
+      "scripts"
+    ]
+  },
+  "context": {
+    "instanceType": "r5.large",
+    "volumeSize": 30,
+    "sshKeyName": "",
+    "sshCidr": "0.0.0.0/0",
+    "minecraftPort": 25565,
+    "hostedZoneName": "broccoli-dependence.stichiboi.com",
+    "serverSubdomain": "minecraft"
+  }
+}
