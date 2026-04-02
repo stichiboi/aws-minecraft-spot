@@ -53,9 +53,11 @@ export function buildUserDataBundle(options: BuildUserDataOptions): UserDataBund
     path.join(templatesDir, PER_BOOT_FILE),
     "utf-8"
   );
-  const perBootScript = stripCfnSubEscapes(
-    interpolateUserDataScript(perBootRaw, options.placeholders)
-  );
+  // per-boot.sh gets all placeholder values at runtime via `source /etc/minecraft/server.conf`
+  // (written by user-data.sh with CDK-resolved values). Do NOT interpolate here — doing so
+  // embeds CDK token strings (e.g. ${Token[TOKEN.52]}) into the base64 blob where CDK cannot
+  // resolve them, causing bash syntax errors on boot.
+  const perBootScript = stripCfnSubEscapes(perBootRaw);
   const perBootBase64 = Buffer.from(perBootScript).toString("base64");
 
   const userDataRaw = fs.readFileSync(

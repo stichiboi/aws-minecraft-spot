@@ -52,6 +52,12 @@ export class MinecraftStack extends cdk.Stack {
       "SSH access"
     );
 
+    sg.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.icmpPing(),
+      "Allow ping"
+    );
+
     // ── S3 Bucket (mods + backups) ──────────────────────────────────
     const bucket = new s3.Bucket(this, "ModsBucket", {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
@@ -172,13 +178,10 @@ export class MinecraftStack extends cdk.Stack {
     // Tag for easy identification
     cdk.Tags.of(instance).add("Name", "MinecraftServer");
 
-    // ── Route53 A Record (placeholder - updated by per-boot script) ─
-    new route53.ARecord(this, "DnsRecord", {
-      zone: hostedZone,
-      recordName: props.serverSubdomain,
-      target: route53.RecordTarget.fromIpAddresses("127.0.0.1"),
-      ttl: cdk.Duration.seconds(60),
-    });
+    // Route53 A record is NOT managed here — the per-boot script upserts it on
+    // every boot with the real public IP. Keeping it in CDK would reset it to
+    // 127.0.0.1 on every `cdk deploy`. On `cdk destroy` you must delete the
+    // A record manually from the hosted zone.
 
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "InstanceId", {

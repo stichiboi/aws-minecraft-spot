@@ -40,4 +40,9 @@ fi
 
 echo ""
 echo "✓ Deploy complete!"
+echo ""
+echo "Note: config/mod changes only take effect on next boot."
+echo "      Restart the instance to apply them and refresh DNS:"
+echo "        bash scripts/stop-server.sh && bash scripts/start-server.sh"
+echo ""
 bash "${SCRIPT_DIR}/status.sh"

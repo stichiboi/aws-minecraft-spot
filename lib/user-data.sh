@@ -5,7 +5,7 @@ exec > >(tee /var/log/minecraft-setup.log) 2>&1
 echo "=== Minecraft one-time setup started at $(date) ==="
 
 # ── 1. Install system packages ───────────────────────────────────
-dnf install -y java-17-amazon-corretto-headless jq nvme-cli
+dnf install -y java-21-amazon-corretto-headless jq nvme-cli
 
 # ── 2. Create minecraft user ────────────────────────────────────
 MC_USER="minecraft"
@@ -15,13 +15,23 @@ if ! id "${!MC_USER}" &>/dev/null; then
   useradd -r -m -d "${!MC_HOME}" -s /bin/bash "${!MC_USER}"
 fi
 
-# ── 3. Install per-boot script ──────────────────────────────────
+# ── 3. Write server config (CDK resolves these tokens in the outer script) ──
+mkdir -p /etc/minecraft
+cat > /etc/minecraft/server.conf <<'CONF'
+VOLUME_ID="${VOLUME_ID}"
+BUCKET_NAME="${BUCKET_NAME}"
+HOSTED_ZONE_ID="${HOSTED_ZONE_ID}"
+FQDN="${FQDN}"
+MINECRAFT_PORT="${MINECRAFT_PORT}"
+CONF
+
+# ── 4. Install per-boot script ──────────────────────────────────
 mkdir -p /var/lib/cloud/scripts/per-boot
 # Per-boot script content, base64-encoded by CDK at deploy time (Fn::Base64(Fn::Sub(...)))
 echo "${PER_BOOT_SCRIPT_B64}" | base64 -d > /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 chmod +x /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 
-# ── 4. Create systemd service ───────────────────────────────────
+# ── 5. Create systemd service ───────────────────────────────────
 cat > /etc/systemd/system/minecraft.service <<'UNIT'
 [Unit]
 Description=Minecraft Server
@@ -43,7 +53,7 @@ UNIT
 
 systemctl daemon-reload
 
-# ── 5. Run per-boot script (first boot) ─────────────────────────
+# ── 6. Run per-boot script (first boot) ─────────────────────────
 /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 
 echo "=== Minecraft one-time setup completed at $(date) ==="

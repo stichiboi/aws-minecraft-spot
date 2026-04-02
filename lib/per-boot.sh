@@ -1,12 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# ── CDK / CloudFormation Fn::Sub values (BUCKET_NAME, FQDN, etc. at deploy) ──
-VOLUME_ID="${VOLUME_ID}"
-BUCKET_NAME="${BUCKET_NAME}"
-HOSTED_ZONE_ID="${HOSTED_ZONE_ID}"
-FQDN="${FQDN}"
-MINECRAFT_PORT="${MINECRAFT_PORT}"
+# ── Server config written by first-boot user-data.sh ────────────
+# shellcheck source=/dev/null
+source /etc/minecraft/server.conf
 
 # Bash vars: ${!name} is written so Fn::Sub does not treat them as CFN vars.
 MC_USER="minecraft"
@@ -150,8 +147,7 @@ if [[ ! -f "${!INSTALLED_MARKER}" ]]; then
     local INSTALLER_URL="https://maven.minecraftforge.net/net/minecraftforge/forge/${!FORGE_VER}/forge-${!FORGE_VER}-installer.jar"
 
     curl -sL -o /tmp/forge-installer.jar "${!INSTALLER_URL}"
-    cd "${!SERVER_DIR}"
-    java -jar /tmp/forge-installer.jar --installServer
+    (cd "${!SERVER_DIR}" && java -jar /tmp/forge-installer.jar --installServer)
     rm -f /tmp/forge-installer.jar
     [[ -f "${!SERVER_DIR}/run.sh" ]] && chmod +x "${!SERVER_DIR}/run.sh"
   }
@@ -162,18 +158,19 @@ if [[ ! -f "${!INSTALLED_MARKER}" ]]; then
   }
 
   install_neoforge() {
-    local NEOFORGE_VER="${!MC_VERSION}-${!LOADER_VERSION}"
-    local INSTALLER_URL="https://maven.neoforged.net/net/neoforged/neoforged/${!NEOFORGE_VER}/neoforged-${!NEOFORGE_VER}-installer.jar"
+    local INSTALLER_URL="https://maven.neoforged.net/releases/net/neoforged/neoforge/${!LOADER_VERSION}/neoforge-${!LOADER_VERSION}-installer.jar"
 
     curl -sL -o /tmp/neoforge-installer.jar "${!INSTALLER_URL}"
-    cd "${!SERVER_DIR}"
-    java -jar /tmp/neoforge-installer.jar --installServer
+    (cd "${!SERVER_DIR}" && java -jar /tmp/neoforge-installer.jar --installServer)
+    rm -f /tmp/neoforge-installer.jar
+    [[ -f "${!SERVER_DIR}/run.sh" ]] && chmod +x "${!SERVER_DIR}/run.sh"
   }
 
   case "${!SERVER_TYPE}" in
-    vanilla) install_vanilla ;;
-    forge)   install_forge ;;
-    fabric)  install_fabric ;;
+    vanilla)  install_vanilla ;;
+    forge)    install_forge ;;
+    fabric)   install_fabric ;;
+    neoforge) install_neoforge ;;
     *)
       echo "Unknown server type: ${!SERVER_TYPE}, falling back to vanilla"
       install_vanilla
@@ -207,7 +204,7 @@ sed -i "s/^server-port=.*/server-port=${MINECRAFT_PORT}/" "${!SERVER_DIR}/server
 # ── 12. Write launch script ─────────────────────────────────────
 LAUNCH_CMD="java ${!JVM_ARGS} -jar server.jar nogui"
 
-if [[ "${!SERVER_TYPE}" == "forge" && -f "${!SERVER_DIR}/run.sh" ]]; then
+if [[ -f "${!SERVER_DIR}/run.sh" ]]; then
   LAUNCH_CMD="bash run.sh"
 fi
 
