@@ -81,7 +81,7 @@ echo "Data volume device: ${REAL_DEVICE}"
 
 # ── 4. Format if new (no filesystem yet) ────────────────────────
 if ! blkid -o value -s TYPE "${REAL_DEVICE}" &>/dev/null; then
-  echo "New volume — formatting as xfs..."
+  echo "New volume - formatting as xfs..."
   mkfs.xfs "${REAL_DEVICE}"
 fi
 
@@ -171,7 +171,7 @@ if [[ ! -f "${INSTALLED_MARKER}" ]]; then
 
   touch "${INSTALLED_MARKER}"
 else
-  echo "Server already installed — skipping."
+  echo "Server already installed - skipping."
 fi
 
 # ── 10. Sync mods from S3 ───────────────────────────────────────
@@ -184,7 +184,7 @@ if [[ ! -f "${SERVER_DIR}/server.properties" ]]; then
   cat > "${SERVER_DIR}/server.properties" <<PROPS
 server-port=${MINECRAFT_PORT}
 enable-rcon=false
-motd=Maincraift — powered by AWS Spot
+motd=Maincraift - powered by AWS Spot
 max-players=10
 view-distance=12
 simulation-distance=10

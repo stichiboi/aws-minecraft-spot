@@ -17,7 +17,7 @@ if [[ -n "${BUCKET_NAME}" && "${BUCKET_NAME}" != "None" ]]; then
   aws s3 cp server-config/server.properties "s3://${BUCKET_NAME}/config/server.properties"
   echo "  Config uploaded to s3://${BUCKET_NAME}/config/"
 else
-  echo "  Stack not yet deployed — config will be uploaded after first deploy."
+  echo "  Stack not yet deployed - config will be uploaded after first deploy."
 fi
 
 echo ""

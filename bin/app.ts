@@ -17,7 +17,7 @@ const env: cdk.Environment = {
 
 new MinecraftStack(app, "MinecraftServer", {
   env,
-  description: "Modded Minecraft server — Spot EC2, S3 mods, Route53 DNS",
+  description: "Modded Minecraft server - Spot EC2, S3 mods, Route53 DNS",
 
   instanceType: app.node.tryGetContext("instanceType") || "r5.large",
   volumeSize: Number(app.node.tryGetContext("volumeSize")) || 30,

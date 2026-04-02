@@ -38,7 +38,7 @@ export class MinecraftStack extends cdk.Stack {
     const sg = new ec2.SecurityGroup(this, "ServerSg", {
       vpc,
       allowAllOutbound: true,
-      description: "Minecraft server — game port + SSH",
+      description: "Minecraft server - game port + SSH",
     });
 
     sg.addIngressRule(
@@ -160,7 +160,9 @@ export class MinecraftStack extends cdk.Stack {
       role,
       userData,
       securityGroup: sg,
-      keyName: props.sshKeyName || undefined,
+      keyPair: props.sshKeyName
+        ? ec2.KeyPair.fromKeyPairName(this, "SshKeyPair", props.sshKeyName)
+        : undefined,
       blockDevices: [
         {
           deviceName: "/dev/xvda",
@@ -188,7 +190,7 @@ export class MinecraftStack extends cdk.Stack {
     // Tag for easy identification
     cdk.Tags.of(instance).add("Name", "MinecraftServer");
 
-    // ── Route53 A Record (placeholder — updated by per-boot script) ─
+    // ── Route53 A Record (placeholder - updated by per-boot script) ─
     new route53.ARecord(this, "DnsRecord", {
       zone: hostedZone,
       recordName: props.serverSubdomain,
