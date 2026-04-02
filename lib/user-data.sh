@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Per-boot script content, base64-encoded by CDK at synth time
-PER_BOOT_SCRIPT_B64="${PER_BOOT_SCRIPT_B64}"
-
 exec > >(tee /var/log/minecraft-setup.log) 2>&1
 echo "=== Minecraft one-time setup started at $(date) ==="
 
@@ -14,12 +11,13 @@ dnf install -y java-17-amazon-corretto-headless jq nvme-cli
 MC_USER="minecraft"
 MC_HOME="/opt/minecraft"
 
-if ! id "${MC_USER}" &>/dev/null; then
-  useradd -r -m -d "${MC_HOME}" -s /bin/bash "${MC_USER}"
+if ! id "${!MC_USER}" &>/dev/null; then
+  useradd -r -m -d "${!MC_HOME}" -s /bin/bash "${!MC_USER}"
 fi
 
 # ── 3. Install per-boot script ──────────────────────────────────
 mkdir -p /var/lib/cloud/scripts/per-boot
+# Per-boot script content, base64-encoded by CDK at deploy time (Fn::Base64(Fn::Sub(...)))
 echo "${PER_BOOT_SCRIPT_B64}" | base64 -d > /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 chmod +x /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 

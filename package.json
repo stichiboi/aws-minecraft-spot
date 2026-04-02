@@ -4,6 +4,8 @@
   "description": "Modded Minecraft server on AWS using CDK (Spot EC2, S3 mods, Route53 DNS)",
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "render-user-data": "npx ts-node --prefer-ts-exts scripts/render-user-data.ts",
     "watch": "tsc -w",
     "cdk": "cdk",
     "deploy": "bash scripts/deploy.sh",
@@ -11,9 +13,10 @@
     "status": "bash scripts/status.sh"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "aws-cdk": "^2.180.0",
     "typescript": "~5.8.0",
-    "@types/node": "^22.0.0"
+    "vitest": "^3.0.0"
   },
   "dependencies": {
     "aws-cdk-lib": "^2.180.0",

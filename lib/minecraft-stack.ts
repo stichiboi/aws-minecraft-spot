@@ -4,8 +4,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import { Construct } from "constructs";
-import * as fs from "fs";
-import * as path from "path";
+import { buildUserDataBundle } from "./build-user-data";
 
 export interface MinecraftStackProps extends cdk.StackProps {
   instanceType: string;
@@ -129,29 +128,12 @@ export class MinecraftStack extends cdk.Stack {
       VOLUME_ID: dataVolume.volumeId,
     };
 
-    const interpolate = (script: string) =>
-      Object.entries(interpolationVars).reduce(
-        (s, [key, val]) => s.replace(new RegExp(`\\$\\{${key}\\}`, "g"), val),
-        script
-      );
+    const { userDataScript } = buildUserDataBundle({
+      templatesDir: __dirname,
+      placeholders: interpolationVars,
+    });
 
-    const perBootRaw = fs.readFileSync(
-      path.join(__dirname, "per-boot.sh"),
-      "utf-8"
-    );
-    const perBootInterpolated = interpolate(perBootRaw);
-    const perBootB64 = Buffer.from(perBootInterpolated).toString("base64");
-
-    const userDataRaw = fs.readFileSync(
-      path.join(__dirname, "user-data.sh"),
-      "utf-8"
-    );
-    const userDataInterpolated = interpolate(userDataRaw).replace(
-      /\$\{PER_BOOT_SCRIPT_B64\}/g,
-      perBootB64
-    );
-
-    userData.addCommands(userDataInterpolated);
+    userData.addCommands(userDataScript);
 
     // ── Launch Template (small root volume only) ────────────────────
     const launchTemplate = new ec2.LaunchTemplate(this, "LaunchTemplate", {

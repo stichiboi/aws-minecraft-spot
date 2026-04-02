@@ -1,0 +1,61 @@
+# https://taskfile.dev/docs/reference/schema
+version: "3"
+
+vars:
+  LINES: "200"
+  KEY: ""
+
+tasks:
+  default:
+    cmds:
+      - task -l
+
+  deploy:
+    desc: Upload server config, run cdk deploy, upload config after first deploy
+    cmds:
+      - bash scripts/deploy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  destroy:
+    desc: Destroy MinecraftServer stack (interactive confirm; S3 and EBS retained)
+    cmds:
+      - bash scripts/destroy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  status:
+    desc: Show stack, instance, bucket, and server address
+    cmds:
+      - bash scripts/status.sh
+
+  start-server:
+    desc: Start the EC2 instance (shows status after)
+    cmds:
+      - bash scripts/start-server.sh
+
+  stop-server:
+    desc: Stop the EC2 instance (EBS preserved)
+    cmds:
+      - bash scripts/stop-server.sh
+
+  logs:
+    desc: "Tail Minecraft logs via SSM (override line count: task logs LINES=500)"
+    cmds:
+      - bash scripts/logs.sh {{.LINES}}
+
+  ssh:
+    desc: "SSH to ec2-user@public IP (optional: task ssh KEY=~/.ssh/key.pem)"
+    cmds:
+      - bash scripts/ssh.sh{{if ne .KEY ""}} {{.KEY | shellQuote}}{{end}}
+
+  cleanup-orphans:
+    desc: "List EC2 orphans (same Name tag, not stack InstanceId); task cleanup-orphans -- --execute"
+    cmds:
+      - bash scripts/cleanup-orphan-instances.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  upload-mods:
+    desc: Sync mods/*.jar to the stack S3 mods prefix
+    cmds:
+      - bash scripts/upload-mods.sh
+
+  render-user-data:
+    desc: Expand lib user-data templates for local inspection (pass flags after --)
+    cmds:
+      - npx ts-node --prefer-ts-exts scripts/render-user-data.ts{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}

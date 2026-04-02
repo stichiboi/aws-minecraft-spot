@@ -40,7 +40,7 @@ Edit `server-config/config.json`:
 
 ```json
 {
-  "type": "forge",        // "vanilla", "forge", or "fabric"
+  "type": "forge",        // "vanilla", "forge", "neoforge", or "fabric"
   "mcVersion": "1.20.4",
   "loaderVersion": "49.0.49",
   "jvmArgs": "-Xms4G -Xmx12G ..."
