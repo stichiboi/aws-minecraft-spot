@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import { Construct } from "constructs";
 import { buildUserDataBundle } from "./build-user-data";
@@ -123,22 +124,38 @@ export class MinecraftStack extends cdk.Stack {
       })
     );
 
+    // ── SSM Config Parameters ────────────────────────────────────────
+    // Per-boot script reads these at runtime instead of relying on values
+    // baked into user-data. Decouples config from CloudFormation user-data
+    // and eliminates the Fn::Sub escaping that was required previously.
+    const configPath = "/minecraft/config";
+    const configEntries: [string, string][] = [
+      ["bucket-name",    bucket.bucketName],
+      ["volume-id",      dataVolume.volumeId],
+      ["hosted-zone-id", hostedZone.hostedZoneId],
+      ["fqdn",           fqdn],
+      ["port",           String(props.minecraftPort)],
+    ];
+    for (const [name, value] of configEntries) {
+      new ssm.StringParameter(this, `Param-${name}`, {
+        parameterName: `${configPath}/${name}`,
+        stringValue: value,
+      });
+    }
+
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParametersByPath", "ssm:GetParameter"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}/*`,
+        ],
+      })
+    );
+
     // ── User Data (two-stage: one-time setup + per-boot) ────────────
     const userData = ec2.UserData.forLinux();
-
-    const interpolationVars: Record<string, string> = {
-      BUCKET_NAME: bucket.bucketName,
-      HOSTED_ZONE_ID: hostedZone.hostedZoneId,
-      FQDN: fqdn,
-      MINECRAFT_PORT: String(props.minecraftPort),
-      VOLUME_ID: dataVolume.volumeId,
-    };
-
-    const { userDataScript } = buildUserDataBundle({
-      templatesDir: __dirname,
-      placeholders: interpolationVars,
-    });
-
+    const { userDataScript } = buildUserDataBundle({ templatesDir: __dirname });
     userData.addCommands(userDataScript);
 
     // ── Launch Template (small root volume only) ────────────────────
