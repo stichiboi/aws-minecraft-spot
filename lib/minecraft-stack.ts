@@ -9,6 +9,7 @@ import { buildUserDataBundle } from "./build-user-data";
 import { MinecraftLogging } from "./minecraft-logging";
 
 export interface MinecraftStackProps extends cdk.StackProps {
+  bucket: s3.IBucket;
   instanceType: string;
   volumeSize: number;
   sshKeyName?: string;
@@ -56,19 +57,7 @@ export class MinecraftStack extends cdk.Stack {
 
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.icmpPing(), "Allow ping");
 
-    // ── S3 Bucket (mods + backups) ──────────────────────────────────
-    const bucket = new s3.Bucket(this, "ModsBucket", {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      lifecycleRules: [
-        {
-          id: "CleanupOldBackups",
-          prefix: "backups/",
-          expiration: cdk.Duration.days(30),
-        },
-      ],
-    });
+    const { bucket } = props;
 
     // ── Route53 Hosted Zone (lookup existing) ───────────────────────
     const hostedZone = route53.HostedZone.fromLookup(this, "HostedZone", {
@@ -227,11 +216,6 @@ export class MinecraftStack extends cdk.Stack {
     new cdk.CfnOutput(this, "InstancePublicIp", {
       value: instance.attrPublicIp,
       description: "EC2 Instance IP",
-    });
-
-    new cdk.CfnOutput(this, "BucketName", {
-      value: bucket.bucketName,
-      description: "S3 bucket for mods and backups",
     });
 
     new cdk.CfnOutput(this, "ServerAddress", {

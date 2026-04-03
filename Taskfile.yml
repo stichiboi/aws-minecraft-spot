@@ -2,7 +2,6 @@
 version: "3"
 
 vars:
-  LINES: "200"
   KEY: ""
 
 tasks:
@@ -10,13 +9,51 @@ tasks:
     cmds:
       - task -l
 
-  deploy:
-    desc: Upload server config, run cdk deploy, upload config after first deploy
+  bootstrap:
+    desc: "Bootstrap CDK project"
+    sources:
+      - app.ts
     cmds:
-      - bash scripts/deploy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+      - npx cdk bootstrap
+
+  setup:
+    desc: "Install and bootstrap CDK project"
+    cmds:
+      - npm i
+      - task: bootstrap
+
+  deploy:
+    desc: "Full deploy: bucket stack → upload mods/config → server stack"
+    cmds:
+      - task: deploy-bucket
+      - task: upload-mods
+      - task: deploy-instance
+
+  deploy-bucket:
+    desc: Deploy the MinecraftBucket stack (S3 bucket)
+    cmds:
+      - bash scripts/deploy-bucket.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  upload-mods:
+    desc: Upload server config and sync mods to S3
+    sources:
+      - scripts/upload-mods.sh
+      - ./mods/*.jar
+    cmds:
+      - bash scripts/upload-mods.sh
+
+  sync-mods:
+    desc: Upload mods to S3, sync to running EC2 instance, and restart the server (no SSH needed)
+    cmds:
+      - bash scripts/sync-mods.sh
+
+  deploy-instance:
+    desc: Deploy the MinecraftServer stack (EC2, networking, DNS)
+    cmds:
+      - bash scripts/deploy-instance.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
   destroy:
-    desc: Destroy MinecraftServer stack (interactive confirm; S3 and EBS retained)
+    desc: Destroy MinecraftServer + MinecraftBucket stacks (interactive confirm; deletes all resources)
     cmds:
       - bash scripts/destroy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
@@ -35,12 +72,17 @@ tasks:
     cmds:
       - bash scripts/stop-server.sh
 
-  logs:*:
-    desc: "Tail Minecraft logs via SSM (override line count: task logs LINES=500)"
-    vars:
-      LINES: "{{index .MATCH 0}}"
+  logs:
+    desc: "Tail all Minecraft log streams in parallel (add -- --follow to stream)"
     cmds:
-      - bash scripts/logs.sh {{.LINES}}
+      - bash scripts/logs.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  logs:*:
+    desc: "Tail a specific log stream: boot, setup, or server (add -- --follow to stream)"
+    vars:
+      SOURCE: "{{index .MATCH 0}}"
+    cmds:
+      - bash scripts/logs.sh {{.SOURCE}}{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
   ssh:
     desc: "SSH to ec2-user@public IP (optional: task ssh KEY=~/.ssh/key.pem)"
@@ -51,11 +93,6 @@ tasks:
     desc: "List EC2 orphans (same Name tag, not stack InstanceId); task cleanup-orphans -- --execute"
     cmds:
       - bash scripts/cleanup-orphan-instances.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
-
-  upload-mods:
-    desc: Sync mods/*.jar to the stack S3 mods prefix
-    cmds:
-      - bash scripts/upload-mods.sh
 
   render-user-data:
     desc: Expand lib user-data templates for local inspection (pass flags after --)

@@ -19,9 +19,9 @@ INSTANCE_ID=$(aws ec2 describe-instances \
   --output text)
 
 BUCKET_NAME=$(aws cloudformation describe-stacks \
-  --stack-name "${STACK_NAME}" \
+  --stack-name "MinecraftBucket" \
   --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
-  --output text)
+  --output text 2>/dev/null || echo "N/A")
 
 SERVER_ADDR=$(aws cloudformation describe-stacks \
   --stack-name "${STACK_NAME}" \
