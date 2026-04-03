@@ -1,92 +1,28 @@
 #!/bin/bash
 set -euo pipefail
 
-# Pull Minecraft-related logs from the EC2 instance via SSM (no SSH required).
-# Usage: scripts/logs.sh [lines]
-#   lines — tail size per file / journal (default: 200)
+# Stream Minecraft logs from CloudWatch Logs.
+# Usage: scripts/logs.sh <boot|setup|server> [--follow]
 
-STACK_NAME="MinecraftServer"
-LINES="${1:-200}"
-
-if ! [[ "${LINES}" =~ ^[0-9]+$ ]]; then
-  echo "Usage: $0 [lines]" >&2
-  echo "  lines — number of lines to tail from each log source (default: 200)" >&2
-  exit 1
-fi
-
-INSTANCE_ID=$(aws cloudformation describe-stacks \
-  --stack-name "${STACK_NAME}" \
-  --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue' \
-  --output text)
-
-STATE=$(aws ec2 describe-instances \
-  --instance-ids "${INSTANCE_ID}" \
-  --query 'Reservations[0].Instances[0].State.Name' \
-  --output text)
-
-if [[ "${STATE}" != "running" ]]; then
-  echo "Instance ${INSTANCE_ID} is not running (state: ${STATE}). Start it with scripts/start-server.sh" >&2
-  exit 1
-fi
-
-PARAMS=$(cat <<EOF
-{
-  "commands": [
-    "echo '=== /var/log/minecraft-setup.log (last ${LINES} lines) ==='",
-    "tail -n ${LINES} /var/log/minecraft-setup.log 2>/dev/null || echo '(missing)'",
-    "echo",
-    "echo '=== /var/log/minecraft-boot.log (last ${LINES} lines) ==='",
-    "tail -n ${LINES} /var/log/minecraft-boot.log 2>/dev/null || echo '(missing)'",
-    "echo",
-    "echo '=== minecraft.service (journal, last ${LINES} lines) ==='",
-    "journalctl -u minecraft -n ${LINES} --no-pager 2>/dev/null || echo '(journalctl failed)'"
-  ]
-}
-EOF
+declare -A LOG_GROUPS=(
+  [boot]="/minecraft/boot"
+  [setup]="/minecraft/setup"
+  [server]="/minecraft/server"
 )
 
-COMMAND_ID=$(aws ssm send-command \
-  --instance-ids "${INSTANCE_ID}" \
-  --document-name "AWS-RunShellScript" \
-  --comment "Fetch Minecraft server logs" \
-  --parameters "${PARAMS}" \
-  --query 'Command.CommandId' \
-  --output text)
+SOURCE="${1:-}"
+FOLLOW="${2:-}"
 
-echo "Waiting for SSM command ${COMMAND_ID} on ${INSTANCE_ID}..."
-while true; do
-  STATUS=$(aws ssm get-command-invocation \
-    --command-id "${COMMAND_ID}" \
-    --instance-id "${INSTANCE_ID}" \
-    --query 'Status' \
-    --output text 2>/dev/null || echo "Pending")
-
-  case "${STATUS}" in
-    Success | Failed | Cancelled | TimedOut | Undeliverable) break ;;
-  esac
-  sleep 2
-done
-
-OUT=$(aws ssm get-command-invocation \
-  --command-id "${COMMAND_ID}" \
-  --instance-id "${INSTANCE_ID}" \
-  --query 'StandardOutputContent' \
-  --output text)
-
-ERR=$(aws ssm get-command-invocation \
-  --command-id "${COMMAND_ID}" \
-  --instance-id "${INSTANCE_ID}" \
-  --query 'StandardErrorContent' \
-  --output text)
-
-printf '%s' "${OUT}"
-if [[ -n "${ERR}" && "${ERR}" != "None" ]]; then
-  echo "--- stderr ---" >&2
-  printf '%s' "${ERR}" >&2
-fi
-
-if [[ "${STATUS}" != "Success" ]]; then
-  echo >&2
-  echo "SSM command finished with status: ${STATUS}" >&2
+if [[ -z "${SOURCE}" || -z "${LOG_GROUPS[${SOURCE}]+set}" ]]; then
+  echo "Usage: $0 <boot|setup|server> [--follow]" >&2
   exit 1
 fi
+
+LOG_GROUP="${LOG_GROUPS[${SOURCE}]}"
+
+ARGS=(--log-group-name "${LOG_GROUP}")
+if [[ "${FOLLOW}" == "--follow" ]]; then
+  ARGS+=(--follow)
+fi
+
+aws logs tail "${ARGS[@]}"

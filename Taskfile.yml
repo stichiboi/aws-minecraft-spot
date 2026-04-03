@@ -35,8 +35,10 @@ tasks:
     cmds:
       - bash scripts/stop-server.sh
 
-  logs:
+  logs:*:
     desc: "Tail Minecraft logs via SSM (override line count: task logs LINES=500)"
+    vars:
+      LINES: "{{index .MATCH 0}}"
     cmds:
       - bash scripts/logs.sh {{.LINES}}
 

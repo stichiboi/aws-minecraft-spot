@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
+MODS_DIR="${PROJECT_DIR}/mods"
+
 
 cd "${PROJECT_DIR}"
 
@@ -16,6 +18,13 @@ if [[ -n "${BUCKET_NAME}" && "${BUCKET_NAME}" != "None" ]]; then
   aws s3 cp server-config/config.json "s3://${BUCKET_NAME}/config/config.json"
   aws s3 cp server-config/server.properties "s3://${BUCKET_NAME}/config/server.properties"
   echo "  Config uploaded to s3://${BUCKET_NAME}/config/"
+
+  echo "Syncing mods to s3://${BUCKET_NAME}/mods/ ..."
+  aws s3 sync "${MODS_DIR}" "s3://${BUCKET_NAME}/mods/" --delete --exclude "*" --include "*.jar"
+
+  echo ""
+  echo "✓ Mods uploaded."
+
 else
   echo "  Stack not yet deployed - config will be uploaded after first deploy."
 fi
@@ -35,6 +44,9 @@ if [[ -z "${BUCKET_NAME}" || "${BUCKET_NAME}" == "None" ]]; then
   echo "▸ Uploading server config to newly created bucket..."
   aws s3 cp server-config/config.json "s3://${BUCKET_NAME}/config/config.json"
   aws s3 cp server-config/server.properties "s3://${BUCKET_NAME}/config/server.properties"
+  echo "Syncing mods to s3://${BUCKET_NAME}/mods/ ..."
+  aws s3 sync "${MODS_DIR}" "s3://${BUCKET_NAME}/mods/" --delete --exclude "*" --include "*.jar"
+
   echo "  Done."
 fi
 

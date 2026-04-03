@@ -5,6 +5,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as route53 from "aws-cdk-lib/aws-route53";
 import { Construct } from "constructs";
 import { buildUserDataBundle } from "./build-user-data";
+import { MinecraftLogging } from "./minecraft-logging";
 
 export interface MinecraftStackProps extends cdk.StackProps {
   instanceType: string;
@@ -52,15 +53,11 @@ export class MinecraftStack extends cdk.Stack {
       "SSH access"
     );
 
-    sg.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.icmpPing(),
-      "Allow ping"
-    );
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.icmpPing(), "Allow ping");
 
     // ── S3 Bucket (mods + backups) ──────────────────────────────────
     const bucket = new s3.Bucket(this, "ModsBucket", {
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       lifecycleRules: [
@@ -85,7 +82,7 @@ export class MinecraftStack extends cdk.Stack {
       size: cdk.Size.gibibytes(props.volumeSize),
       volumeType: ec2.EbsDeviceVolumeType.GP3,
       encrypted: true,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     cdk.Tags.of(dataVolume).add("Name", "MinecraftData");
@@ -94,9 +91,12 @@ export class MinecraftStack extends cdk.Stack {
     const role = new iam.Role(this, "InstanceRole", {
       assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMManagedInstanceCore"),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "AmazonSSMManagedInstanceCore"
+        ),
       ],
     });
+    MinecraftLogging.addPoliciesToRole(role);
 
     bucket.grantReadWrite(role);
     dataVolume.grantAttachVolume(role);
@@ -142,6 +142,8 @@ export class MinecraftStack extends cdk.Stack {
     userData.addCommands(userDataScript);
 
     // ── Launch Template (small root volume only) ────────────────────
+    // TagSpecifications ensure instances launched from this template (including
+    // spot relaunches) always receive the Name tag, independent of CloudFormation.
     const launchTemplate = new ec2.LaunchTemplate(this, "LaunchTemplate", {
       instanceType: new ec2.InstanceType(props.instanceType),
       machineImage: ec2.MachineImage.latestAmazonLinux2023(),
@@ -164,6 +166,7 @@ export class MinecraftStack extends cdk.Stack {
         interruptionBehavior: ec2.SpotInstanceInterruption.STOP,
         requestType: ec2.SpotRequestType.PERSISTENT,
       },
+      launchTemplateName: "MinecraftServer",
     });
 
     // ── EC2 Instance ────────────────────────────────────────────────
@@ -175,18 +178,38 @@ export class MinecraftStack extends cdk.Stack {
       subnetId: vpc.publicSubnets[0].subnetId,
     });
 
-    // Tag for easy identification
-    cdk.Tags.of(instance).add("Name", "MinecraftServer");
+    // Propagate the Name tag to instances via the launch template so spot
+    // relaunches are also tagged — cdk.Tags.of(instance) only tags the
+    // CloudFormation-managed instance and becomes stale after a spot relaunch.
+    const cfnLaunchTemplate = launchTemplate.node
+      .defaultChild as ec2.CfnLaunchTemplate;
+    cfnLaunchTemplate.addPropertyOverride(
+      "LaunchTemplateData.TagSpecifications",
+      [
+        {
+          ResourceType: "instance",
+          Tags: [{ Key: "Name", Value: "MinecraftServer" }],
+        },
+      ]
+    );
 
     // Route53 A record is NOT managed here — the per-boot script upserts it on
     // every boot with the real public IP. Keeping it in CDK would reset it to
     // 127.0.0.1 on every `cdk deploy`. On `cdk destroy` you must delete the
     // A record manually from the hosted zone.
 
+    // ── CloudWatch Logging (log groups + CWAgent via SSM State Manager) ──
+    new MinecraftLogging(this, "Logging");
+
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "InstanceId", {
       value: instance.ref,
       description: "EC2 Instance ID",
+    });
+
+    new cdk.CfnOutput(this, "InstancePublicIp", {
+      value: instance.attrPublicIp,
+      description: "EC2 Instance IP",
     });
 
     new cdk.CfnOutput(this, "BucketName", {
@@ -207,6 +230,11 @@ export class MinecraftStack extends cdk.Stack {
     new cdk.CfnOutput(this, "DataVolumeId", {
       value: dataVolume.volumeId,
       description: "EBS data volume ID (Minecraft world + server files)",
+    });
+
+    new cdk.CfnOutput(this, "MinecraftPort", {
+      value: String(props.minecraftPort),
+      description: "Minecraft server port",
     });
   }
 }
