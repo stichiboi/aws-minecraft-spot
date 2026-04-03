@@ -1,18 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-STACK_NAME="MinecraftServer"
-
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=MinecraftServer" \
-            "Name=instance-state-name,Values=pending,running,stopped,stopping" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
-
-if [[ -z "${INSTANCE_ID}" || "${INSTANCE_ID}" == "None" ]]; then
-  echo "No MinecraftServer instance found. Is it running?"
-  exit 1
-fi
+INSTANCE_ID="${1:?Usage: ssh.sh <instance-id> [key-path]}"
+KEY_PATH="${2:-}"
 
 PUBLIC_IP=$(aws ec2 describe-instances \
   --instance-ids "${INSTANCE_ID}" \
@@ -20,17 +10,17 @@ PUBLIC_IP=$(aws ec2 describe-instances \
   --output text)
 
 if [[ "${PUBLIC_IP}" == "None" || -z "${PUBLIC_IP}" ]]; then
-  echo "Instance ${INSTANCE_ID} has no public IP. Is it running?"
+  echo "Instance ${INSTANCE_ID} has no public IP. Is it running?" >&2
   echo "  Current state: $(aws ec2 describe-instances \
     --instance-ids "${INSTANCE_ID}" \
     --query 'Reservations[0].Instances[0].State.Name' \
-    --output text)"
+    --output text)" >&2
   exit 1
 fi
 
 SSH_KEY_ARG=""
-if [[ -n "${1:-}" ]]; then
-  SSH_KEY_ARG="-i ${1}"
+if [[ -n "${KEY_PATH}" ]]; then
+  SSH_KEY_ARG="-i ${KEY_PATH}"
 fi
 
 echo "Connecting to ${PUBLIC_IP} (instance ${INSTANCE_ID})..."

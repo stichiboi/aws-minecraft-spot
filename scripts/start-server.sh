@@ -1,18 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-STACK_NAME="MinecraftServer"
-
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=MinecraftServer" \
-            "Name=instance-state-name,Values=pending,running,stopped,stopping" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
-
-if [[ -z "${INSTANCE_ID}" || "${INSTANCE_ID}" == "None" ]]; then
-  echo "No MinecraftServer instance found. Run 'cdk deploy' to create one."
-  exit 1
-fi
+INSTANCE_ID="${1:?Usage: start-server.sh <instance-id>}"
 
 CURRENT_STATE=$(aws ec2 describe-instances \
   --instance-ids "${INSTANCE_ID}" \
@@ -21,7 +10,6 @@ CURRENT_STATE=$(aws ec2 describe-instances \
 
 if [[ "${CURRENT_STATE}" == "running" ]]; then
   echo "Instance ${INSTANCE_ID} is already running."
-  bash "$(dirname "${BASH_SOURCE[0]}")/status.sh"
   exit 0
 fi
 
@@ -56,8 +44,8 @@ if [[ "${CURRENT_STATE}" == "stopped" ]]; then
     done
 
     if [[ -z "${NEW_INSTANCE_ID}" || "${NEW_INSTANCE_ID}" == "None" ]]; then
-      echo "ERROR: Spot request was not fulfilled after 10 minutes."
-      echo "  Check capacity/pricing: aws ec2 describe-spot-instance-requests --spot-instance-request-ids ${SPOT_REQUEST_ID}"
+      echo "ERROR: Spot request was not fulfilled after 10 minutes." >&2
+      echo "  Check capacity/pricing: aws ec2 describe-spot-instance-requests --spot-instance-request-ids ${SPOT_REQUEST_ID}" >&2
       exit 1
     fi
 
@@ -79,5 +67,3 @@ aws ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
 
 echo ""
 echo "✓ Instance is running!"
-sleep 5
-bash "$(dirname "${BASH_SOURCE[0]}")/status.sh"

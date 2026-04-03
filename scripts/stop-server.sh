@@ -1,18 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-STACK_NAME="MinecraftServer"
-
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=MinecraftServer" \
-            "Name=instance-state-name,Values=pending,running,stopped,stopping" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
-
-if [[ -z "${INSTANCE_ID}" || "${INSTANCE_ID}" == "None" ]]; then
-  echo "No MinecraftServer instance found. Is the stack deployed?"
-  exit 1
-fi
+INSTANCE_ID="${1:?Usage: stop-server.sh <instance-id>}"
 
 CURRENT_STATE=$(aws ec2 describe-instances \
   --instance-ids "${INSTANCE_ID}" \
@@ -32,4 +21,4 @@ aws ec2 wait instance-stopped --instance-ids "${INSTANCE_ID}"
 
 echo ""
 echo "✓ Instance stopped. EBS volume is preserved."
-echo "  Run scripts/start-server.sh to restart."
+echo "  Run 'task start-server' to restart."

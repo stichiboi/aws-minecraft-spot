@@ -8,31 +8,34 @@ Modded Minecraft server on AWS - Spot EC2, S3 mod sync, Route53 dynamic DNS, man
 npm install
 # Edit cdk.json context values (instance type, SSH key, domain, etc.)
 # Edit server-config/config.json (Forge/Fabric/Vanilla, MC version)
-npx cdk bootstrap   # first time only
-bash scripts/deploy.sh
+task setup    # installs deps and bootstraps CDK (first time only)
+task deploy   # deploy bucket + upload mods/config + deploy server + show status
 ```
 
 After deploy, CloudFormation outputs include **InstanceId**, **BucketName**, **ServerAddress**, **HostedZoneId**, and **DataVolumeId** (the persistent Minecraft data volume).
 
 ## Day-to-Day
 
-These scripts wrap the AWS CLI and CDK. They read stack outputs from the `MinecraftServer` stack by name.
+Run `task` to list all available tasks.
 
 | Command | What it does |
 |---|---|
-| `bash scripts/status.sh` | Instance state, public IP, DNS name, S3 bucket |
-| `bash scripts/start-server.sh` | Start a stopped instance (per-boot logic runs on boot) |
-| `bash scripts/stop-server.sh` | Stop the instance; **data EBS stays attached until next start** |
-| `bash scripts/ssh.sh [key.pem]` | SSH to `ec2-user@` current public IP |
-| `bash scripts/upload-mods.sh` | `aws s3 sync` local `mods/*.jar` → bucket `mods/` |
-| `bash scripts/deploy.sh` | Uploads `server-config/` to S3, then `npx cdk deploy` |
-| `bash scripts/destroy.sh` | `cdk destroy` - **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
+| `task status` | Instance state, public IP, DNS name, S3 bucket |
+| `task start-server` | Start a stopped instance (per-boot logic runs on boot) |
+| `task stop-server` | Stop the instance; **data EBS stays attached until next start** |
+| `task ssh` | SSH to `ec2-user@` current public IP (`task ssh KEY=~/.ssh/key.pem` to specify a key) |
+| `task upload-mods` | Sync local `mods/*.jar` and `server-config/` to S3 |
+| `task deploy` | Full deploy: bucket → upload → server → status |
+| `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
+| `task logs` | Tail all CloudWatch log streams (add `-- --follow` to stream) |
+| `task logs:server` | Tail a specific stream: `boot`, `setup`, or `server` |
 
 ## Adding Mods
 
 1. Put `.jar` files in `mods/` (directory is gitignored).
-2. `bash scripts/upload-mods.sh`
-3. Restart so per-boot sync runs: `bash scripts/stop-server.sh && bash scripts/start-server.sh`
+2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server (no SSH needed).
+
+Or to apply on next boot only: `task upload-mods`, then `task stop-server && task start-server`.
 
 ## Switching Mod Loaders
 
@@ -47,7 +50,7 @@ Edit `server-config/config.json`:
 }
 ```
 
-Then `bash scripts/deploy.sh` and restart the instance. The per-boot script reinstalls the server only when the type/version/loader combo changes (see `.installed_*` marker on the data volume).
+Then `task deploy` and restart the instance. The per-boot script reinstalls the server only when the type/version/loader combo changes (see `.installed_*` marker on the data volume).
 
 ## Architecture
 

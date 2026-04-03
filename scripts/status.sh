@@ -1,35 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-STACK_NAME="MinecraftServer"
-
-stack_exists() {
-  aws cloudformation describe-stacks --stack-name "${STACK_NAME}" &>/dev/null
-}
-
-if ! stack_exists; then
-  echo "Stack '${STACK_NAME}' does not exist. Run scripts/deploy.sh first."
-  exit 0
-fi
-
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=MinecraftServer" \
-            "Name=instance-state-name,Values=pending,running,stopped,stopping" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
-
-BUCKET_NAME=$(aws cloudformation describe-stacks \
-  --stack-name "MinecraftBucket" \
-  --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
-  --output text 2>/dev/null || echo "N/A")
+INSTANCE_ID="${1:?Usage: status.sh <instance-id> <bucket-name>}"
+BUCKET_NAME="${2:?Usage: status.sh <instance-id> <bucket-name>}"
 
 SERVER_ADDR=$(aws cloudformation describe-stacks \
-  --stack-name "${STACK_NAME}" \
+  --stack-name "MinecraftServer" \
   --query 'Stacks[0].Outputs[?OutputKey==`ServerAddress`].OutputValue' \
   --output text)
 
 MC_PORT=$(aws cloudformation describe-stacks \
-  --stack-name "${STACK_NAME}" \
+  --stack-name "MinecraftServer" \
   --query 'Stacks[0].Outputs[?OutputKey==`MinecraftPort`].OutputValue' \
   --output text)
 MC_PORT="${MC_PORT:-25565}"

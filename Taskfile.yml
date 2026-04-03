@@ -9,43 +9,59 @@ tasks:
     cmds:
       - task -l
 
+  # ── Helpers ──────────────────────────────────────────────────────────────
+
+  ensure-instance:
+    internal: true
+    desc: Verify a MinecraftServer EC2 instance exists (any non-terminated state)
+    cmds:
+      - bash scripts/get-instance-id.sh > /dev/null
+
+  ensure-bucket:
+    internal: true
+    desc: Verify the MinecraftBucket stack exists and has a BucketName output
+    cmds:
+      - bash scripts/get-bucket-name.sh > /dev/null
+
   bootstrap:
-    desc: "Bootstrap CDK project"
+    internal: true
+    desc: Bootstrap CDK project
     sources:
       - app.ts
     cmds:
       - npx cdk bootstrap
 
-  setup:
-    desc: "Install and bootstrap CDK project"
+  install:
+    internal: true
+    desc: Install project dependencies
+    sources:
+      - package.json
+      - package-lock.json
     cmds:
       - npm i
+
+  # ── Setup ─────────────────────────────────────────────────────────────────
+
+  setup:
+    desc: Install and bootstrap CDK project
+    cmds:
+      - task: install
       - task: bootstrap
 
+  # ── Deploy ────────────────────────────────────────────────────────────────
+
   deploy:
-    desc: "Full deploy: bucket stack → upload mods/config → server stack"
+    desc: "Full deploy: bucket stack → upload mods/config → server stack → status"
     cmds:
       - task: deploy-bucket
       - task: upload-mods
       - task: deploy-instance
+      - task: status
 
   deploy-bucket:
     desc: Deploy the MinecraftBucket stack (S3 bucket)
     cmds:
       - bash scripts/deploy-bucket.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
-
-  upload-mods:
-    desc: Upload server config and sync mods to S3
-    sources:
-      - scripts/upload-mods.sh
-      - ./mods/*.jar
-    cmds:
-      - bash scripts/upload-mods.sh
-
-  sync-mods:
-    desc: Upload mods to S3, sync to running EC2 instance, and restart the server (no SSH needed)
-    cmds:
-      - bash scripts/sync-mods.sh
 
   deploy-instance:
     desc: Deploy the MinecraftServer stack (EC2, networking, DNS)
@@ -57,20 +73,60 @@ tasks:
     cmds:
       - bash scripts/destroy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
-  status:
-    desc: Show stack, instance, bucket, and server address
+  # ── Mods / Config ─────────────────────────────────────────────────────────
+
+  upload-mods:
+    desc: Upload server config and sync mods to S3
+    vars:
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    sources:
+      - scripts/upload-mods.sh
+      - ./mods/*.jar
     cmds:
-      - bash scripts/status.sh
+      - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
+
+  sync-mods:
+    desc: Upload mods to S3, sync to running EC2 instance, and restart the server (no SSH needed)
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    cmds:
+      - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
+      - bash scripts/sync-mods.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+
+  # ── Instance lifecycle ────────────────────────────────────────────────────
 
   start-server:
     desc: Start the EC2 instance (shows status after)
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
     cmds:
-      - bash scripts/start-server.sh
+      - bash scripts/start-server.sh {{.INSTANCE_ID}}
+      - task: status
 
   stop-server:
     desc: Stop the EC2 instance (EBS preserved)
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
     cmds:
-      - bash scripts/stop-server.sh
+      - bash scripts/stop-server.sh {{.INSTANCE_ID}}
+
+  # ── Observe ───────────────────────────────────────────────────────────────
+
+  status:
+    desc: Show stack, instance, bucket, and server address
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    cmds:
+      - bash scripts/status.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
 
   logs:
     desc: "Tail all Minecraft log streams in parallel (add -- --follow to stream)"
@@ -86,8 +142,13 @@ tasks:
 
   ssh:
     desc: "SSH to ec2-user@public IP (optional: task ssh KEY=~/.ssh/key.pem)"
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
     cmds:
-      - bash scripts/ssh.sh{{if ne .KEY ""}} {{.KEY | shellQuote}}{{end}}
+      - bash scripts/ssh.sh {{.INSTANCE_ID}}{{if ne .KEY ""}} {{.KEY | shellQuote}}{{end}}
+
+  # ── Maintenance ───────────────────────────────────────────────────────────
 
   cleanup-orphans:
     desc: "List EC2 orphans (same Name tag, not stack InstanceId); task cleanup-orphans -- --execute"
