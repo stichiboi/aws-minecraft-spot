@@ -4,6 +4,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as route53 from "aws-cdk-lib/aws-route53";
+import * as cr from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { buildUserDataBundle } from "./build-user-data";
 import { MinecraftLogging } from "./minecraft-logging";
@@ -76,6 +77,29 @@ export class MinecraftStack extends cdk.Stack {
     });
 
     cdk.Tags.of(dataVolume).add("Name", "MinecraftData");
+
+    // Force-detach the EBS volume on stack deletion so CloudFormation can delete
+    // it even if a spot-relaunched instance (unknown to CFN) has it attached.
+    // Delete order: custom resource runs first (detach), then DataVolume is deleted.
+    const detachOnDelete = new cr.AwsCustomResource(this, "DetachVolumeOnDelete", {
+      onDelete: {
+        service: "EC2",
+        action: "detachVolume",
+        parameters: {
+          VolumeId: dataVolume.volumeId,
+          Force: true,
+        },
+        ignoreErrorCodesMatching: "IncorrectState", // already detached = no-op
+      },
+      installLatestAwsSdk: false,
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ["ec2:DetachVolume"],
+          resources: ["*"],
+        }),
+      ]),
+    });
+    detachOnDelete.node.addDependency(dataVolume);
 
     // ── IAM Role ────────────────────────────────────────────────────
     const role = new iam.Role(this, "InstanceRole", {
