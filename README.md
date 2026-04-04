@@ -75,3 +75,8 @@ At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}
 
 - 24/7: ~$24–31/month
 - Few hours/day: ~$8–14/month
+
+## Next steps
+- [ ] Backup minecraft world data on shutdown / time interval -> store the backups on S3 cold storage
+- [ ] Lambda commands to start the server
+- [ ] Automatic server shutdown when no players are online
