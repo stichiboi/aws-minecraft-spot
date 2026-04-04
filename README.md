@@ -4,11 +4,10 @@ Modded Minecraft server on AWS - Spot EC2, S3 mod sync, Route53 dynamic DNS, man
 
 ## Quick Start
 
+This project heavily relies on [taskfile](https://taskfile.dev/docs/installation)
+
 ```bash
-npm install
-# Edit cdk.json context values (instance type, SSH key, domain, etc.)
-# Edit server-config/config.json (Forge/Fabric/Vanilla, MC version)
-task setup    # installs deps and bootstraps CDK (first time only)
+task setup    # installs deps and bootstraps CDK
 task deploy   # deploy bucket + upload mods/config + deploy server + show status
 ```
 
@@ -35,7 +34,7 @@ Run `task` to list all available tasks.
 1. Put `.jar` files in `mods/` (directory is gitignored).
 2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server (no SSH needed).
 
-Or to apply on next boot only: `task upload-mods`, then `task stop-server && task start-server`.
+Or to apply on next boot only (e.g. the server is offlilne): `task upload-mods`.
 
 ## Switching Mod Loaders
 
