@@ -5,12 +5,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "render-user-data": "npx ts-node --prefer-ts-exts scripts/render-user-data.ts",
     "watch": "tsc -w",
-    "cdk": "cdk",
-    "deploy": "bash scripts/deploy.sh",
-    "destroy": "bash scripts/destroy.sh",
-    "status": "bash scripts/status.sh"
+    "cdk": "cdk"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
