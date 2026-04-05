@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Stream Minecraft logs from CloudWatch Logs.
-# Usage: scripts/logs.sh [boot|setup|server] [--follow]
-#        Omit source to tail all 3 streams in parallel.
+# Usage: scripts/logs.sh [boot|server] [--follow]
+#        Omit source to tail all streams in parallel.
 
 SOURCE="${1:-}"
 FOLLOW="${2:-}"
 
-SOURCES=(boot setup server)
+SOURCES=(boot server)
 
 tail_group() {
   local source="$1"
@@ -26,9 +26,9 @@ if [[ -z "${SOURCE}" ]]; then
 fi
 
 case "${SOURCE}" in
-  boot|setup|server) tail_group "${SOURCE}" ;;
+  boot|server) tail_group "${SOURCE}" ;;
   *)
-    echo "Usage: $0 [boot|setup|server] [--follow]" >&2
+    echo "Usage: $0 [boot|server] [--follow]" >&2
     exit 1
     ;;
 esac

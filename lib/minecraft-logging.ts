@@ -17,10 +17,6 @@ export class MinecraftLogging extends Construct {
       logGroupName: "/minecraft/boot",
       ...logGroupDefaults,
     });
-    new logs.LogGroup(this, "SetupLogGroup", {
-      logGroupName: "/minecraft/setup",
-      ...logGroupDefaults,
-    });
     new logs.LogGroup(this, "ServerLogGroup", {
       logGroupName: "/minecraft/server",
       ...logGroupDefaults,
@@ -36,12 +32,6 @@ export class MinecraftLogging extends Construct {
           logs_collected: {
             files: {
               collect_list: [
-                {
-                  file_path: "/var/log/minecraft-setup.log",
-                  log_group_name: "/minecraft/setup",
-                  log_stream_name: "{instance_id}",
-                  initial_position: "beginning_of_file",
-                },
                 {
                   file_path: "/var/log/minecraft-boot.log",
                   log_group_name: "/minecraft/boot",

@@ -25,7 +25,10 @@ REGION=$(curl -s -H "X-aws-ec2-metadata-token: ${TOKEN}" \
 
 export AWS_DEFAULT_REGION="${REGION}"
 
-# ── 2. Read config from SSM Parameter Store ──────────────────────
+# ── 2. System update ─────────────────────────────────────────────
+dnf update -y --security
+
+# ── 3. Read config from SSM Parameter Store ──────────────────────
 CFG=$(aws ssm get-parameters-by-path \
   --path /minecraft/config \
   --output json \
@@ -41,7 +44,7 @@ HOSTED_ZONE_ID=$(get_param hosted-zone-id)
 FQDN=$(get_param fqdn)
 MINECRAFT_PORT=$(get_param port)
 
-# ── 3. Attach EBS data volume if not already attached ────────────
+# ── 4. Attach EBS data volume if not already attached ────────────
 ATTACH_STATE=$(aws ec2 describe-volumes \
   --volume-ids "${VOLUME_ID}" \
   --query "Volumes[0].Attachments[?InstanceId=='${INSTANCE_ID}'].State" \
@@ -59,7 +62,7 @@ else
   echo "Volume ${VOLUME_ID} already attached."
 fi
 
-# ── 4. Find the real block device ────────────────────────────────
+# ── 5. Find the real block device ────────────────────────────────
 # On Nitro instances (r5, m5, c5, etc.) /dev/sdf maps to /dev/nvme*n1.
 # We locate it via /dev/disk/by-id/ using the volume serial number.
 VOLUME_ID_CLEAN="${VOLUME_ID//-/}"
@@ -88,13 +91,13 @@ fi
 
 echo "Data volume device: ${REAL_DEVICE}"
 
-# ── 5. Format if new (no filesystem yet) ─────────────────────────
+# ── 6. Format if new (no filesystem yet) ─────────────────────────
 if ! blkid -o value -s TYPE "${REAL_DEVICE}" &>/dev/null; then
   echo "New volume - formatting as xfs..."
   mkfs.xfs "${REAL_DEVICE}"
 fi
 
-# ── 6. Mount ──────────────────────────────────────────────────────
+# ── 7. Mount ──────────────────────────────────────────────────────
 mkdir -p "${MC_DATA}"
 if ! mountpoint -q "${MC_DATA}"; then
   mount "${REAL_DEVICE}" "${MC_DATA}"
@@ -103,7 +106,7 @@ fi
 
 mkdir -p "${SERVER_DIR}" "${CONFIG_DIR}" "${MODS_DIR}"
 
-# ── 7. Update Route53 A record ────────────────────────────────────
+# ── 8. Update Route53 A record ────────────────────────────────────
 echo "Updating DNS: ${FQDN} -> ${PUBLIC_IP}"
 aws route53 change-resource-record-sets \
   --hosted-zone-id "${HOSTED_ZONE_ID}" \
@@ -119,7 +122,7 @@ aws route53 change-resource-record-sets \
     }]
   }"
 
-# ── 8. Sync config from S3 ────────────────────────────────────────
+# ── 9. Sync config from S3 ────────────────────────────────────────
 aws s3 cp "s3://${BUCKET_NAME}/config/config.json" "${CONFIG_DIR}/config.json" \
   || echo '{"type":"vanilla","mcVersion":"1.20.4","loaderVersion":""}' > "${CONFIG_DIR}/config.json"
 
@@ -129,14 +132,18 @@ aws s3 cp "s3://${BUCKET_NAME}/config/jvm-args.txt" "${SERVER_DIR}/jvm-args.txt"
 aws s3 cp "s3://${BUCKET_NAME}/config/server.properties" "${SERVER_DIR}/server.properties" \
   || true
 
-# ── 9. Read config ────────────────────────────────────────────────
+# ── 10. Read config ───────────────────────────────────────────────
 SERVER_TYPE=$(jq -r '.type // "vanilla"' "${CONFIG_DIR}/config.json")
 MC_VERSION=$(jq -r '.mcVersion // "1.20.4"' "${CONFIG_DIR}/config.json")
 LOADER_VERSION=$(jq -r '.loaderVersion // ""' "${CONFIG_DIR}/config.json")
+JAVA_VERSION=$(jq -r '.javaVersion // "21"' "${CONFIG_DIR}/config.json")
 
-echo "Server: ${SERVER_TYPE} ${MC_VERSION} (loader: ${LOADER_VERSION})"
+echo "Server: ${SERVER_TYPE} ${MC_VERSION} (loader: ${LOADER_VERSION}, java: ${JAVA_VERSION})"
 
-# ── 10. Install server if needed (skip if already installed) ─────
+# ── 11. Install Java ──────────────────────────────────────────────
+dnf install -y "java-${JAVA_VERSION}-amazon-corretto-headless"
+
+# ── 12. Install server if needed (skip if already installed) ─────
 INSTALLED_MARKER="${SERVER_DIR}/.installed_${SERVER_TYPE}_${MC_VERSION}_${LOADER_VERSION}"
 
 if [[ ! -f "${INSTALLED_MARKER}" ]]; then
@@ -194,10 +201,10 @@ else
   echo "Server already installed - skipping."
 fi
 
-# ── 11. Sync mods from S3 ─────────────────────────────────────────
+# ── 13. Sync mods from S3 ─────────────────────────────────────────
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
 
-# ── 12. EULA + server.properties ──────────────────────────────────
+# ── 14. EULA + server.properties ──────────────────────────────────
 echo "eula=true" > "${SERVER_DIR}/eula.txt"
 
 if [[ ! -f "${SERVER_DIR}/server.properties" ]]; then
@@ -213,7 +220,7 @@ fi
 
 sed -i "s/^server-port=.*/server-port=${MINECRAFT_PORT}/" "${SERVER_DIR}/server.properties"
 
-# ── 13. Write launch script ───────────────────────────────────────
+# ── 15. Write launch script ───────────────────────────────────────
 LAUNCH_CMD="java @jvm-args.txt -jar server.jar nogui"
 
 if [[ -f "${SERVER_DIR}/run.sh" ]]; then
@@ -227,7 +234,7 @@ exec ${LAUNCH_CMD}
 STARTSCRIPT
 chmod +x "${SERVER_DIR}/start.sh"
 
-# ── 14. Fix ownership and start ───────────────────────────────────
+# ── 16. Fix ownership and start ───────────────────────────────────
 chown -R "${MC_USER}:${MC_USER}" "${MC_DATA}"
 
 systemctl restart minecraft.service

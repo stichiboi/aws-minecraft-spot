@@ -1,11 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-exec > >(tee /var/log/minecraft-setup.log) 2>&1
 echo "=== Minecraft one-time setup started at $(date) ==="
 
 # ── 1. Install system packages ───────────────────────────────────
-dnf install -y java-21-amazon-corretto-headless jq nvme-cli
+dnf install -y jq nvme-cli amazon-cloudwatch-agent
 
 # ── 2. Create minecraft user ─────────────────────────────────────
 MC_USER="minecraft"

@@ -11,3 +11,4 @@ mods/
 
 .env
 *.pem
+.task/checksum/upload-mods

@@ -106,7 +106,6 @@ tasks:
         sh: bash scripts/get-instance-id.sh
     cmds:
       - bash scripts/start-server.sh {{.INSTANCE_ID}}
-      - task: status
 
   stop-server:
     desc: Stop the EC2 instance (EBS preserved)

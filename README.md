@@ -27,7 +27,7 @@ Run `task` to list all available tasks.
 | `task deploy` | Full deploy: bucket → upload → server → status |
 | `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
 | `task logs` | Tail all CloudWatch log streams (add `-- --follow` to stream) |
-| `task logs:server` | Tail a specific stream: `boot`, `setup`, or `server` |
+| `task logs:server` | Tail a specific stream: `boot` or `server` |
 
 ## Adding Mods
 
@@ -36,20 +36,43 @@ Run `task` to list all available tasks.
 
 Or to apply on next boot only (e.g. the server is offlilne): `task upload-mods`.
 
-## Switching Mod Loaders
+## Customizing the Server
+
+### Launcher type and Minecraft version
 
 Edit `server-config/config.json`:
 
 ```json
 {
-  "type": "forge",        // "vanilla", "forge", "neoforge", or "fabric"
-  "mcVersion": "1.20.4",
-  "loaderVersion": "49.0.49",
-  "jvmArgs": "-Xms4G -Xmx12G ..."
+  "type": "neoforge",     // "vanilla", "forge", "neoforge", or "fabric"
+  "mcVersion": "1.21.1",
+  "loaderVersion": "21.1.222",  // omit or leave empty for vanilla/fabric without a specific loader version
+  "javaVersion": "21"           // major version, e.g. "17" or "21"
 }
 ```
 
-Then `task deploy` and restart the instance. The per-boot script reinstalls the server only when the type/version/loader combo changes (see `.installed_*` marker on the data volume).
+Then run `task upload-mods` and restart the instance (`task stop-server` + `task start-server`). The per-boot script reinstalls the server only when the type/version/loader combo changes (tracked via a `.installed_*` marker on the data volume). Java is installed on every boot via `dnf` (idempotent — fast if already present).
+
+### JVM memory and GC settings
+
+Edit `server-config/jvm-args.txt` — one flag per line:
+
+```
+-Xms1G
+-Xmx2500M
+-XX:+UseG1GC
+...
+```
+
+**`-Xms`** is the initial heap size (allocated immediately on start). **`-Xmx`** is the maximum. A good rule of thumb: leave at least 1–1.5GB free for the OS and JVM non-heap overhead.
+
+| Instance   | RAM   | Recommended `-Xmx` |
+|------------|-------|---------------------|
+| t3.medium  | 4 GB  | `2500M`             |
+| r5.large   | 16 GB | `12G`               |
+| r5.xlarge  | 32 GB | `26G`               |
+
+To apply changes to a running instance: `task sync-mods` (uploads to S3 and pushes to the instance via SSM, no SSH or reboot needed).
 
 ## Architecture
 
@@ -66,8 +89,8 @@ Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** beh
 
 | File | When it runs | Role |
 |---|---|---|
-| `lib/user-data.sh` | First boot only (cloud-init) | Installs Java/jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
-| `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Attaches & mounts the data volume, updates DNS, syncs S3 config/mods, installs server if needed, writes `start.sh`, `systemctl restart minecraft`. |
+| `lib/user-data.sh` | First boot only (cloud-init) | Installs jq/nvme-cli/cloudwatch-agent, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
+| `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 config/mods, installs Java and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
 
 At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}`, etc., and embeds the per-boot script (base64) into user-data.
 

@@ -1,5 +1,6 @@
 {
   "type": "neoforge",
   "mcVersion": "1.21.1",
-  "loaderVersion": "21.1.222"
+  "loaderVersion": "21.1.222",
+  "javaVersion": "21"
 }

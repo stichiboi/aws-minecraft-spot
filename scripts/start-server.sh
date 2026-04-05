@@ -27,7 +27,6 @@ if [[ "${CURRENT_STATE}" == "stopped" ]]; then
     echo "Spot instance detected (request: ${SPOT_REQUEST_ID})."
     echo "Terminating stopped instance to re-enable the persistent spot request..."
     aws ec2 terminate-instances --instance-ids "${INSTANCE_ID}" > /dev/null
-    aws ec2 wait instance-terminated --instance-ids "${INSTANCE_ID}"
     echo "Terminated. Waiting for spot request to fulfill a new instance..."
 
     NEW_INSTANCE_ID=""
