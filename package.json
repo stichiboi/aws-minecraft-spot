@@ -9,13 +9,19 @@
     "cdk": "cdk"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.161",
     "@types/node": "^22.0.0",
     "aws-cdk": "^2.180.0",
+    "esbuild": "^0.28.0",
     "typescript": "~5.8.0",
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@aws-sdk/client-ec2": "^3.1024.0",
+    "@aws-sdk/client-lambda": "^3.1024.0",
     "aws-cdk-lib": "^2.180.0",
-    "constructs": "^10.4.0"
+    "constructs": "^10.4.0",
+    "dotenv": "^17.4.1",
+    "tweetnacl": "^1.0.3"
   }
 }

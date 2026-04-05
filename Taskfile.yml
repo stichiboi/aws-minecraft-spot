@@ -151,6 +151,11 @@ tasks:
     cmds:
       - bash scripts/cleanup-orphan-instances.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
+  register-discord-commands:
+    desc: Register /start /stop /status slash commands with Discord (run once after creating the app)
+    cmds:
+      - npx ts-node --prefer-ts-exts discord/register-commands.ts
+
   render-user-data:
     desc: Expand lib user-data templates for local inspection (pass flags after --)
     cmds:

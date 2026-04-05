@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import "source-map-support/register";
+import * as dotenv from "dotenv";
 import * as cdk from "aws-cdk-lib";
 import { MinecraftBucketStack } from "../lib/minecraft-bucket-stack";
 import { MinecraftStack } from "../lib/minecraft-stack";
+import { MinecraftApiStack } from "../lib/minecraft-api-stack";
+
+dotenv.config();
 
 const app = new cdk.App();
 
@@ -21,7 +25,7 @@ const bucketStack = new MinecraftBucketStack(app, "MinecraftBucket", {
   description: "Modded Minecraft server - S3 bucket for mods and backups",
 });
 
-new MinecraftStack(app, "MinecraftServer", {
+const serverStack = new MinecraftStack(app, "MinecraftServer", {
   env,
   description: "Modded Minecraft server - Spot EC2, S3 mods, Route53 DNS",
   bucket: bucketStack.bucket,
@@ -33,4 +37,15 @@ new MinecraftStack(app, "MinecraftServer", {
   minecraftPort: Number(app.node.tryGetContext("minecraftPort")) || 25565,
   hostedZoneName: app.node.tryGetContext("hostedZoneName") || "broccoli-dependence.stichiboi.com",
   serverSubdomain: app.node.tryGetContext("serverSubdomain") || "minecraft",
+});
+
+new MinecraftApiStack(app, "MinecraftApi", {
+  env,
+  description: "Minecraft server Discord bot — API Gateway + Lambda",
+  discordPublicKey: process.env.DISCORD_PUBLIC_KEY ?? "",
+  discordBotToken: process.env.DISCORD_BOT_TOKEN ?? "",
+  discordApplicationId: process.env.DISCORD_APPLICATION_ID ?? "",
+  minecraftPort: serverStack.minecraftPort,
+  serverFqdn: serverStack.fqdn,
+  instanceType: app.node.tryGetContext("instanceType") || "r3.large",
 });

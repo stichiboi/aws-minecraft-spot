@@ -21,6 +21,9 @@ export interface MinecraftStackProps extends cdk.StackProps {
 }
 
 export class MinecraftStack extends cdk.Stack {
+  public readonly fqdn: string;
+  public readonly minecraftPort: number;
+
   constructor(scope: Construct, id: string, props: MinecraftStackProps) {
     super(scope, id, props);
 
@@ -66,6 +69,8 @@ export class MinecraftStack extends cdk.Stack {
     });
 
     const fqdn = `${props.serverSubdomain}.${props.hostedZoneName}`;
+    this.fqdn = fqdn;
+    this.minecraftPort = props.minecraftPort;
 
     // ── Standalone EBS Data Volume ──────────────────────────────────
     const dataVolume = new ec2.Volume(this, "DataVolume", {
