@@ -121,7 +121,10 @@ aws route53 change-resource-record-sets \
 
 # ── 8. Sync config from S3 ────────────────────────────────────────
 aws s3 cp "s3://${BUCKET_NAME}/config/config.json" "${CONFIG_DIR}/config.json" \
-  || echo '{"type":"vanilla","mcVersion":"1.20.4","loaderVersion":"","jvmArgs":"-Xms4G -Xmx12G"}' > "${CONFIG_DIR}/config.json"
+  || echo '{"type":"vanilla","mcVersion":"1.20.4","loaderVersion":""}' > "${CONFIG_DIR}/config.json"
+
+aws s3 cp "s3://${BUCKET_NAME}/config/jvm-args.txt" "${SERVER_DIR}/jvm-args.txt" \
+  || printf -- '-Xms1G\n-Xmx2G\n' > "${SERVER_DIR}/jvm-args.txt"
 
 aws s3 cp "s3://${BUCKET_NAME}/config/server.properties" "${SERVER_DIR}/server.properties" \
   || true
@@ -130,7 +133,6 @@ aws s3 cp "s3://${BUCKET_NAME}/config/server.properties" "${SERVER_DIR}/server.p
 SERVER_TYPE=$(jq -r '.type // "vanilla"' "${CONFIG_DIR}/config.json")
 MC_VERSION=$(jq -r '.mcVersion // "1.20.4"' "${CONFIG_DIR}/config.json")
 LOADER_VERSION=$(jq -r '.loaderVersion // ""' "${CONFIG_DIR}/config.json")
-JVM_ARGS=$(jq -r '.jvmArgs // "-Xms4G -Xmx12G"' "${CONFIG_DIR}/config.json")
 
 echo "Server: ${SERVER_TYPE} ${MC_VERSION} (loader: ${LOADER_VERSION})"
 
@@ -212,7 +214,7 @@ fi
 sed -i "s/^server-port=.*/server-port=${MINECRAFT_PORT}/" "${SERVER_DIR}/server.properties"
 
 # ── 13. Write launch script ───────────────────────────────────────
-LAUNCH_CMD="java ${JVM_ARGS} -jar server.jar nogui"
+LAUNCH_CMD="java @jvm-args.txt -jar server.jar nogui"
 
 if [[ -f "${SERVER_DIR}/run.sh" ]]; then
   LAUNCH_CMD="bash run.sh"

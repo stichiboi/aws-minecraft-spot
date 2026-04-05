@@ -11,6 +11,7 @@ COMMAND_ID=$(aws ssm send-command \
   --document-name "AWS-RunShellScript" \
   --parameters commands="[
     \"aws s3 sync s3://${BUCKET_NAME}/mods/ /opt/minecraft/data/server/mods/ --delete\",
+    \"aws s3 cp s3://${BUCKET_NAME}/config/jvm-args.txt /opt/minecraft/data/server/jvm-args.txt\",
     \"systemctl restart minecraft.service\",
     \"echo 'Done. Service restarted.'\"
   ]" \

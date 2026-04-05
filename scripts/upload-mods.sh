@@ -10,8 +10,7 @@ MODS_DIR="${PROJECT_DIR}/mods"
 cd "${PROJECT_DIR}"
 
 echo "▸ Uploading server config to s3://${BUCKET_NAME}/config/..."
-aws s3 cp server-config/config.json "s3://${BUCKET_NAME}/config/config.json"
-aws s3 cp server-config/server.properties "s3://${BUCKET_NAME}/config/server.properties"
+aws s3 sync server-config/ "s3://${BUCKET_NAME}/config/" --delete
 
 echo ""
 MOD_COUNT=$(find "${MODS_DIR}" -name "*.jar" 2>/dev/null | wc -l | tr -d ' ')
