@@ -16,7 +16,7 @@
     ]
   },
   "context": {
-    "instanceType": "t3.medium",
+    "instanceType": "r3.large",
     "volumeSize": 30,
     "sshKeyName": "",
     "sshCidr": "0.0.0.0/0",

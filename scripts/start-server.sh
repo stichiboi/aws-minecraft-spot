@@ -25,9 +25,13 @@ if [[ -z "${SUBNET_ID}" || "${SUBNET_ID}" == "None" ]]; then
   exit 1
 fi
 
-echo "Launching new spot instance via launch template MinecraftServer..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTANCE_TYPE=$(jq -r '.context.instanceType' "${SCRIPT_DIR}/../cdk.json")
+
+echo "Launching new spot instance (${INSTANCE_TYPE}) via launch template MinecraftServer..."
 INSTANCE_ID=$(aws ec2 run-instances \
   --launch-template "LaunchTemplateName=MinecraftServer,Version=\$Latest" \
+  --instance-type "${INSTANCE_TYPE}" \
   --subnet-id "${SUBNET_ID}" \
   --query 'Instances[0].InstanceId' \
   --output text)

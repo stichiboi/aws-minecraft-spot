@@ -53,6 +53,28 @@ Edit `server-config/config.json`:
 
 Then run `task upload-mods` and restart the instance (`task stop-server` + `task start-server`). The per-boot script reinstalls the server only when the type/version/loader combo changes (tracked via a `.installed_*` marker on the data volume). Java is installed on every boot via `dnf` (idempotent — fast if already present).
 
+### Instance type
+
+Edit `instanceType` in `cdk.json`:
+
+```json
+{
+  "context": {
+    "instanceType": "r5.large"
+  }
+}
+```
+
+`task start-server` reads this value at launch time and passes it to `run-instances`, so **no CDK deploy is needed** — just stop the server, edit `cdk.json`, and start it again:
+
+```bash
+task stop-server
+# edit cdk.json
+task start-server
+```
+
+Run `task deploy-instance` afterwards if you also want the launch template updated for future spot relaunches (e.g. after an interruption).
+
 ### JVM memory and GC settings
 
 Edit `server-config/jvm-args.txt` — one flag per line:
