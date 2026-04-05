@@ -8,17 +8,25 @@ CURRENT_STATE=$(aws ec2 describe-instances \
   --query 'Reservations[0].Instances[0].State.Name' \
   --output text)
 
-if [[ "${CURRENT_STATE}" == "stopped" ]]; then
-  echo "Instance ${INSTANCE_ID} is already stopped."
+if [[ "${CURRENT_STATE}" == "terminated" || "${CURRENT_STATE}" == "shutting-down" ]]; then
+  echo "Instance ${INSTANCE_ID} is already terminating/terminated."
   exit 0
 fi
 
-echo "Stopping instance ${INSTANCE_ID} (current state: ${CURRENT_STATE})..."
-aws ec2 stop-instances --instance-ids "${INSTANCE_ID}"
+SPOT_REQUEST_ID=$(aws ec2 describe-instances \
+  --instance-ids "${INSTANCE_ID}" \
+  --query 'Reservations[0].Instances[0].SpotInstanceRequestId' \
+  --output text)
 
-echo "Waiting for instance to stop..."
-aws ec2 wait instance-stopped --instance-ids "${INSTANCE_ID}"
+if [[ -n "${SPOT_REQUEST_ID}" && "${SPOT_REQUEST_ID}" != "None" ]]; then
+  echo "Cancelling spot request ${SPOT_REQUEST_ID} (prevents auto-relaunch)..."
+  aws ec2 cancel-spot-instance-requests \
+    --spot-instance-request-ids "${SPOT_REQUEST_ID}" > /dev/null
+fi
+
+echo "Terminating instance ${INSTANCE_ID} (async)..."
+aws ec2 terminate-instances --instance-ids "${INSTANCE_ID}" > /dev/null
 
 echo ""
-echo "✓ Instance stopped. EBS volume is preserved."
-echo "  Run 'task start-server' to restart."
+echo "Done. Instance is terminating in the background."
+echo "  Run 'task start-server' to launch a new instance."

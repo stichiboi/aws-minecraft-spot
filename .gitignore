@@ -1,3 +1,5 @@
+.task/**/*
+
 node_modules/
 dist/
 cdk.out/
@@ -11,4 +13,3 @@ mods/
 
 .env
 *.pem
-.task/checksum/upload-mods
