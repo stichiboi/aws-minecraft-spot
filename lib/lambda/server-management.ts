@@ -131,11 +131,18 @@ async function getStatus(): Promise<StatusResult> {
   console.log("getStatus: describing instances", { tag: INSTANCE_TAG });
   const result = await ec2.send(
     new DescribeInstancesCommand({
-      Filters: [{ Name: "tag:Name", Values: [INSTANCE_TAG] }],
+      Filters: [
+        { Name: "tag:Name", Values: [INSTANCE_TAG] },
+        { Name: "instance-state-name", Values: ["pending", "running", "stopping", "stopped"] },
+      ],
     })
   );
 
-  const instance = result.Reservations?.[0]?.Instances?.[0];
+  const STATE_PRIORITY: Record<string, number> = { running: 0, pending: 1, stopping: 2, stopped: 3 };
+  const allInstances = result.Reservations?.flatMap((r) => r.Instances ?? []) ?? [];
+  const instance = allInstances.sort(
+    (a, b) => (STATE_PRIORITY[a.State?.Name ?? ""] ?? 99) - (STATE_PRIORITY[b.State?.Name ?? ""] ?? 99)
+  )[0];
   if (!instance) {
     console.log("getStatus: no instance found");
     return { status: "not_found" };
