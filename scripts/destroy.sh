@@ -10,10 +10,10 @@ echo "⚠  This will destroy both stacks (MinecraftServer + MinecraftBucket)."
 echo "   The S3 bucket and all its contents (mods, backups) will be DELETED."
 echo "   The EBS data volume will also be DELETED."
 echo ""
-read -p "Are you sure? [y/N] " -n 1 -r
+read -r -p "Type 'yes' to confirm: " CONFIRM
 echo ""
 
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ "${CONFIRM}" == "yes" ]]; then
   npx cdk destroy MinecraftServer --force "$@"
   npx cdk destroy MinecraftBucket --force "$@"
   echo ""
