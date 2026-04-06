@@ -46,6 +46,16 @@ export class MinecraftApiStack extends cdk.Stack {
       resources: ["*"],
     });
 
+    const cloudwatchPolicy = new iam.PolicyStatement({
+      actions: ["cloudwatch:GetMetricStatistics"],
+      resources: ["*"],
+    });
+
+    const ssmRunPolicy = new iam.PolicyStatement({
+      actions: ["ssm:SendCommand", "ssm:GetCommandInvocation"],
+      resources: ["*"],
+    });
+
     const ec2Environment = {
       INSTANCE_TAG: "MinecraftServer",
       SUBNET_FILTER: "MinecraftServer/Vpc/PublicSubnet1",
@@ -72,6 +82,8 @@ export class MinecraftApiStack extends cdk.Stack {
     });
 
     serverManagement.addToRolePolicy(ec2Policy);
+    serverManagement.addToRolePolicy(cloudwatchPolicy);
+    serverManagement.addToRolePolicy(ssmRunPolicy);
 
     // ── Worker Lambda (calls server-management logic + posts Discord follow-up) ──
     const worker = new NodejsFunction(this, "DiscordWorker", {
@@ -88,6 +100,8 @@ export class MinecraftApiStack extends cdk.Stack {
     });
 
     worker.addToRolePolicy(ec2Policy);
+    worker.addToRolePolicy(cloudwatchPolicy);
+    worker.addToRolePolicy(ssmRunPolicy);
 
     // ── Handler Lambda (signature verification + command routing) ──────
     const handler = new NodejsFunction(this, "DiscordHandler", {

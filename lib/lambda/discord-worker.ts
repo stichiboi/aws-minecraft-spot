@@ -1,5 +1,43 @@
-import type { WorkerPayload, CommandResult } from "./types";
+import type { WorkerPayload, CommandResult, ServerStats, MetricPoint } from "./types";
 import { runCommand, type CommandName } from "./server-management";
+
+const SPARKS = "▁▂▃▄▅▆▇█";
+
+function sparkline(pts: MetricPoint[]): string {
+  if (pts.length === 0) return "no data";
+  const values = pts.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return values.map((v) => SPARKS[Math.min(7, Math.round(((v - min) / range) * 7))]).join("");
+}
+
+function formatStats(stats: ServerStats): string {
+  const cpuAvg = stats.cpu.length > 0
+    ? (stats.cpu.reduce((s, p) => s + p.value, 0) / stats.cpu.length).toFixed(1) + "%"
+    : "N/A";
+  const netIn = stats.networkIn.length > 0
+    ? (stats.networkIn.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(1) + " MB"
+    : "N/A";
+  const netOut = stats.networkOut.length > 0
+    ? (stats.networkOut.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(1) + " MB"
+    : "N/A";
+
+  const ram = stats.ramUsedGb !== null
+    ? `${stats.ramUsedGb} GB${stats.ramTotalGb !== null ? ` / ${stats.ramTotalGb} GB` : ""}`
+    : "N/A";
+  const disk = stats.diskUsedGb !== null
+    ? `${stats.diskUsedGb} GB${stats.diskTotalGb !== null ? ` / ${stats.diskTotalGb} GB` : ""}`
+    : "N/A";
+
+  return [
+    `> \`CPU (1h):     ${sparkline(stats.cpu)}\`  avg ${cpuAvg}`,
+    `> \`Net in (1h):  ${sparkline(stats.networkIn)}\`  ${netIn}`,
+    `> \`Net out (1h): ${sparkline(stats.networkOut)}\`  ${netOut}`,
+    `> **RAM:** ${ram}`,
+    `> **Disk:** ${disk}`,
+  ].join("\n");
+}
 
 const STATE_EMOJI: Record<string, string> = {
   running: "🟢",
@@ -41,14 +79,18 @@ function formatForDiscord(commandName: CommandName, result: CommandResult): stri
     if (r.status === "found") {
       const stateLabel = `${STATE_EMOJI[r.instanceState] ?? "❓"} ${r.instanceState}`;
       const mcLabel = `${MC_STATUS_EMOJI[r.mcStatus] ?? "❓"} ${r.mcStatus}`;
-      return [
+      const lines = [
         `📡 **Minecraft Server Status**`,
         `> **Instance:** \`${r.instanceId}\` (${r.instanceType})`,
         `> **State:** ${stateLabel}`,
         `> **IP:** \`${r.publicIp}\``,
         `> **Address:** \`${r.fqdn}\``,
         `> **Server:** ${mcLabel}`,
-      ].join("\n");
+      ];
+      if (r.stats) {
+        lines.push(`> ─────────────`, formatStats(r.stats));
+      }
+      return lines.join("\n");
     }
   }
 
