@@ -3,8 +3,29 @@ set -euo pipefail
 
 INSTANCE_ID="${1:?Usage: reset-world.sh <instance-id>}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PATHS_FILE="${SCRIPT_DIR}/../server-paths.txt"
+SERVER_DIR="/opt/minecraft/data/server"
+
 echo "WARNING: This will permanently delete the Minecraft world on instance ${INSTANCE_ID}."
 echo "Folders to be deleted: world/, world_nether/, world_the_end/"
+
+# Collect extra paths from server-paths.txt
+EXTRA_PATHS=()
+if [[ -f "${PATHS_FILE}" ]]; then
+  while IFS= read -r line; do
+    [[ -z "${line}" || "${line}" =~ ^# ]] && continue
+    EXTRA_PATHS+=("${line}")
+  done < "${PATHS_FILE}"
+fi
+
+if [[ ${#EXTRA_PATHS[@]} -gt 0 ]]; then
+  echo "Extra paths (from server-paths.txt):"
+  for p in "${EXTRA_PATHS[@]}"; do
+    echo "  ${SERVER_DIR}/${p}"
+  done
+fi
+
 echo ""
 read -r -p "Type 'yes' to confirm: " CONFIRM
 if [[ "${CONFIRM}" != "yes" ]]; then
@@ -12,20 +33,33 @@ if [[ "${CONFIRM}" != "yes" ]]; then
   exit 0
 fi
 
+# Build the list of shell commands to run via SSM
+COMMANDS=(
+  "systemctl stop minecraft.service"
+  "echo 'Service stopped.'"
+  "rm -rf '${SERVER_DIR}/world' '${SERVER_DIR}/world_nether' '${SERVER_DIR}/world_the_end'"
+  "echo 'World folders deleted.'"
+)
+
+for p in "${EXTRA_PATHS[@]}"; do
+  COMMANDS+=("rm -rf '${SERVER_DIR}/${p}' && echo 'Deleted: ${p}' || echo 'Not found (skipped): ${p}'")
+done
+
+COMMANDS+=(
+  "systemctl start minecraft.service"
+  "echo 'Service started.'"
+)
+
+# Encode commands as a JSON array for SSM
+COMMANDS_JSON=$(printf '%s\n' "${COMMANDS[@]}" | jq -R . | jq -s .)
+
 echo ""
 echo "▸ Resetting world on instance ${INSTANCE_ID} via SSM..."
 
 COMMAND_ID=$(aws ssm send-command \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
-  --parameters commands="[
-    \"systemctl stop minecraft.service\",
-    \"echo 'Service stopped.'\",
-    \"rm -rf /opt/minecraft/data/server/world /opt/minecraft/data/server/world_nether /opt/minecraft/data/server/world_the_end\",
-    \"echo 'World folders deleted.'\",
-    \"systemctl start minecraft.service\",
-    \"echo 'Service started.'\"
-  ]" \
+  --parameters "commands=${COMMANDS_JSON}" \
   --query 'Command.CommandId' \
   --output text)
 

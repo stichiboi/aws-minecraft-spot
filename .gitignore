@@ -13,3 +13,5 @@ mods/
 
 .env
 *.pem
+
+server-paths.txt

@@ -41,6 +41,34 @@ const MINECRAFT_PORT = Number(process.env.MINECRAFT_PORT ?? "25565");
 const SERVER_FQDN = process.env.SERVER_FQDN ?? "";
 const INSTANCE_TYPE = process.env.INSTANCE_TYPE ?? "r3.large";
 
+const STATE_PRIORITY: Record<string, number> = {
+  running: 0,
+  pending: 1,
+  stopping: 2,
+  stopped: 3,
+};
+
+async function getInstance() {
+  const result = await ec2.send(
+    new DescribeInstancesCommand({
+      Filters: [
+        { Name: "tag:Name", Values: [INSTANCE_TAG] },
+        {
+          Name: "instance-state-name",
+          Values: ["pending", "running", "stopping", "stopped"],
+        },
+      ],
+    })
+  );
+  const allInstances =
+    result.Reservations?.flatMap((r) => r.Instances ?? []) ?? [];
+  return allInstances.sort(
+    (a, b) =>
+      (STATE_PRIORITY[a.State?.Name ?? ""] ?? 99) -
+      (STATE_PRIORITY[b.State?.Name ?? ""] ?? 99)
+  )[0];
+}
+
 function probePort(
   host: string,
   port: number,
@@ -130,19 +158,7 @@ async function startServer(): Promise<StartResult> {
 
 async function stopServer(): Promise<StopResult> {
   console.log("stopServer: looking up instance", { tag: INSTANCE_TAG });
-  const result = await ec2.send(
-    new DescribeInstancesCommand({
-      Filters: [
-        { Name: "tag:Name", Values: [INSTANCE_TAG] },
-        {
-          Name: "instance-state-name",
-          Values: ["pending", "running", "stopping", "stopped"],
-        },
-      ],
-    })
-  );
-
-  const instance = result.Reservations?.[0]?.Instances?.[0];
+  const instance = await getInstance();
   if (!instance || !instance.InstanceId) {
     console.log("stopServer: no instance found");
     return { status: "not_found" };
@@ -236,6 +252,8 @@ async function getSsmMetrics(instanceId: string): Promise<SsmMetrics> {
   }
 
   for (let i = 0; i < 8; i++) {
+    // there is a delay between the command being sent and the actual execution
+    await new Promise((r) => setTimeout(r, 1500));
     try {
       const inv = await ssm.send(
         new GetCommandInvocationCommand({
@@ -270,7 +288,6 @@ async function getSsmMetrics(instanceId: string): Promise<SsmMetrics> {
       console.warn("getSsmMetrics: GetCommandInvocation failed", err);
       return defaultMetrics;
     }
-    await new Promise((r) => setTimeout(r, 1500));
   }
 
   console.warn("getSsmMetrics: timed out waiting for command result");
@@ -293,31 +310,7 @@ async function getStats(instanceId: string): Promise<ServerStats> {
 
 async function getStatus(): Promise<StatusResult> {
   console.log("getStatus: describing instances", { tag: INSTANCE_TAG });
-  const result = await ec2.send(
-    new DescribeInstancesCommand({
-      Filters: [
-        { Name: "tag:Name", Values: [INSTANCE_TAG] },
-        {
-          Name: "instance-state-name",
-          Values: ["pending", "running", "stopping", "stopped"],
-        },
-      ],
-    })
-  );
-
-  const STATE_PRIORITY: Record<string, number> = {
-    running: 0,
-    pending: 1,
-    stopping: 2,
-    stopped: 3,
-  };
-  const allInstances =
-    result.Reservations?.flatMap((r) => r.Instances ?? []) ?? [];
-  const instance = allInstances.sort(
-    (a, b) =>
-      (STATE_PRIORITY[a.State?.Name ?? ""] ?? 99) -
-      (STATE_PRIORITY[b.State?.Name ?? ""] ?? 99)
-  )[0];
+  const instance = await getInstance();
   if (!instance) {
     console.log("getStatus: no instance found");
     return { status: "not_found" };
