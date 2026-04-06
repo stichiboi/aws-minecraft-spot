@@ -4,7 +4,7 @@ set -euo pipefail
 echo "=== Minecraft one-time setup started at $(date) ==="
 
 # ── 1. Install system packages ───────────────────────────────────
-dnf install -y jq nvme-cli amazon-cloudwatch-agent
+dnf install -y jq nvme-cli
 
 # ── 2. Create minecraft user ─────────────────────────────────────
 MC_USER="minecraft"

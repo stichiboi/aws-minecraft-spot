@@ -7,7 +7,6 @@ import * as route53 from "aws-cdk-lib/aws-route53";
 import * as cr from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { buildUserDataBundle } from "./build-user-data";
-import { MinecraftLogging } from "./minecraft-logging";
 
 export interface MinecraftStackProps extends cdk.StackProps {
   bucket: s3.IBucket;
@@ -115,8 +114,6 @@ export class MinecraftStack extends cdk.Stack {
         ),
       ],
     });
-    MinecraftLogging.addPoliciesToRole(role);
-
     bucket.grantReadWrite(role);
     dataVolume.grantAttachVolume(role);
     dataVolume.grantDetachVolume(role);
@@ -232,9 +229,6 @@ export class MinecraftStack extends cdk.Stack {
     // every boot with the real public IP. Keeping it in CDK would reset it to
     // 127.0.0.1 on every `cdk deploy`. On `cdk destroy` you must delete the
     // A record manually from the hosted zone.
-
-    // ── CloudWatch Logging (log groups + CWAgent via SSM State Manager) ──
-    new MinecraftLogging(this, "Logging");
 
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "InstanceId", {

@@ -17,7 +17,6 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `scripts/stop-server.sh` | Invoke `minecraft-server-management` Lambda (stop) |
 | `scripts/status.sh` | Invoke `minecraft-server-management` Lambda (status) + show bucket |
 | `scripts/ssh.sh` | SSH into instance |
-| `scripts/logs.sh` | Tail CloudWatch logs |
 | `scripts/reset-world.sh` | Delete world folders on running instance via SSM and restart |
 | `server-paths.txt` | Gitignored: extra server paths for world reset and backup (relative to server dir) |
 | `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks |

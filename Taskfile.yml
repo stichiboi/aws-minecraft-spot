@@ -125,18 +125,6 @@ tasks:
     cmds:
       - bash scripts/status.sh
 
-  logs:
-    desc: "Tail all Minecraft log streams in parallel (add -- --follow to stream)"
-    cmds:
-      - bash scripts/logs.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
-
-  logs:*:
-    desc: "Tail a specific log stream: boot, setup, or server (add -- --follow to stream)"
-    vars:
-      SOURCE: "{{index .MATCH 0}}"
-    cmds:
-      - bash scripts/logs.sh {{.SOURCE}}{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
-
   ssh:
     desc: "SSH to ec2-user@public IP (optional: task ssh KEY=~/.ssh/key.pem)"
     vars:
