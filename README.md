@@ -2,16 +2,24 @@
 
 Modded Minecraft server on AWS - Spot EC2, S3 mod sync, Route53 dynamic DNS, managed with CDK.
 
-## Quick Start
+## Prerequisites
 
-This project heavily relies on [taskfile](https://taskfile.dev/docs/installation)
+- **AWS account** with programmatic access — install and configure the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), then run `aws configure`
+- **Node.js 18+** — https://nodejs.org/en/download
+- **Task** (the task runner) — https://taskfile.dev/installation/ (macOS: `brew install go-task`)
+- **`.env` file** — copy the template and fill in credentials for any bots you want to use:
+  ```bash
+  cp .env.example .env
+  ```
+
+## Quick Start
 
 ```bash
 task setup    # installs deps and bootstraps CDK
 task deploy   # deploy bucket + upload mods/config + deploy server + show status
 ```
 
-After deploy, CloudFormation outputs include **InstanceId**, **BucketName**, **ServerAddress**, **HostedZoneId**, and **DataVolumeId** (the persistent Minecraft data volume).
+After deploy, run `task status` to see the server address.
 
 ## Day-to-Day
 
@@ -96,13 +104,29 @@ Edit `server-config/jvm-args.txt` — one flag per line:
 
 To apply changes to a running instance: `task sync-mods` (uploads to S3 and pushes to the instance via SSM, no SSH or reboot needed).
 
+## Discord bot
+
+Slash commands (`/start`, `/stop`, `/status`) that work without AWS credentials. See [discord/README.md](discord/README.md) for setup.
+
+## Adding a new bot (e.g. Telegram)
+
+The Discord bot is the reference implementation. The pattern for adding another bot:
+
+1. **Handler Lambda** (`lib/lambda/<platform>-handler.ts`) — validates the incoming webhook from your platform, routes the command
+2. **Worker Lambda** (`lib/lambda/<platform>-worker.ts`) — calls `server-management.ts` and sends the reply back to your platform
+3. **Stack wiring** (`lib/minecraft-api-stack.ts`) — add the two Lambdas, an API Gateway route, and env vars (bot token, etc.)
+4. **Credentials** — add them to `.env.example` and `.env`
+
+The core `lib/lambda/server-management.ts` already handles all EC2 logic — new bots just call it and format the response for their platform. See the Discord handler/worker pair as a working example.
+
 ## Architecture
 
 - **EC2 Spot** (`r5.large` default) with **stop** interruption - instance stops, not terminated; EBS data volume is reattached on next boot.
 - **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. Replacing or resizing the instance in CDK does **not** create a new data volume; the same volume is attached each boot.
 - **Small root volume** (8GB gp3) on the instance for the OS only.
-- **S3** - `config/`, `mods/`, and future `backups/`; `deploy.sh` pushes local `server-config/` into `config/`.
+- **S3** - `config/`, `mods/`, and future `backups/`; `upload-mods.sh` pushes local `server-config/` and `mods/` into the bucket.
 - **Route53** - A record updated on **every boot** by the per-boot script (no Elastic IP).
+- **Lambda + API Gateway** - start/stop/status logic lives in `lib/lambda/server-management.ts`; bots call this instead of AWS APIs directly. The Discord handler and worker Lambdas are deployed alongside it.
 - **IMDSv2** - instance scripts use the metadata token API for instance id, public IP, and region.
 
 ## Boot scripts (CDK → EC2)
@@ -122,6 +146,6 @@ At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}
 - Few hours/day: ~$8–14/month
 
 ## Next steps
-- [ ] Backup minecraft world data on shutdown / time interval -> store the backups on S3 cold storage
-- [ ] Lambda commands to start the server
+- [ ] Backup world data on shutdown / on a schedule — store in S3 cold storage
+- [x] Lambda commands to start the server
 - [ ] Automatic server shutdown when no players are online
