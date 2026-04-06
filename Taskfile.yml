@@ -54,7 +54,7 @@ tasks:
     desc: "Full deploy: bucket stack → upload mods/config → server stack → status"
     cmds:
       - task: deploy-bucket
-      # - task: upload-mods
+      - task: upload-mods
       - task: deploy-instance
       - task: deploy-api
       - task: status
