@@ -146,6 +146,7 @@ At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}
 - Few hours/day: ~$8–14/month
 
 ## Next steps
-- [ ] Backup world data on shutdown / on a schedule — store in S3 cold storage
+- [ ] Backup world data on shutdown / on a schedule — store in S3 cold storage. A combination of [HBackup](https://www.curseforge.com/minecraft/mc-mods/hbackup) and S3 sync would be ideal.
 - [x] Lambda commands to start the server
 - [ ] Automatic server shutdown when no players are online
+- [ ] On instance start / stop event, trigger lambda to update bot's commands: currently, sending a /start command will just tell you "Instance is terminating"; it would be nice to have an update once the instance is actually terminated "Instance was terminated at 18:04:33". Same for starting.

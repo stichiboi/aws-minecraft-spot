@@ -147,6 +147,14 @@ tasks:
 
   # ── Maintenance ───────────────────────────────────────────────────────────
 
+  reset-world:
+    desc: "Delete world folders on the running instance and restart the server (interactive confirm)"
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+    cmds:
+      - bash scripts/reset-world.sh {{.INSTANCE_ID}}
+
   cleanup-orphans:
     desc: "List EC2 orphans (same Name tag, not stack InstanceId); task cleanup-orphans -- --execute"
     cmds:
