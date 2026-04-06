@@ -27,7 +27,7 @@ tasks:
     internal: true
     desc: Bootstrap CDK project
     sources:
-      - app.ts
+      - bin/app.ts
     cmds:
       - npx cdk bootstrap
 
@@ -54,19 +54,28 @@ tasks:
     desc: "Full deploy: bucket stack → upload mods/config → server stack → status"
     cmds:
       - task: deploy-bucket
-      - task: upload-mods
+      # - task: upload-mods
       - task: deploy-instance
+      - task: deploy-api
       - task: status
 
   deploy-bucket:
+    internal: true
     desc: Deploy the MinecraftBucket stack (S3 bucket)
     cmds:
       - bash scripts/deploy-bucket.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
   deploy-instance:
+    internal: true
     desc: Deploy the MinecraftServer stack (EC2, networking, DNS)
     cmds:
       - bash scripts/deploy-instance.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+
+  deploy-api:
+    internal: true
+    desc: Deploy the MinecraftApi stack (API Gateway, Lambda)
+    cmds:
+      - bash scripts/deploy-api.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
   destroy:
     desc: Destroy MinecraftServer + MinecraftBucket stacks (interactive confirm; deletes all resources)
@@ -155,8 +164,3 @@ tasks:
     desc: Register /start /stop /status slash commands with Discord (run once after creating the app)
     cmds:
       - npx ts-node --prefer-ts-exts discord/register-commands.ts
-
-  render-user-data:
-    desc: Expand lib user-data templates for local inspection (pass flags after --)
-    cmds:
-      - npx ts-node --prefer-ts-exts scripts/render-user-data.ts{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}

@@ -53,8 +53,10 @@ This registers `/start`, `/stop`, `/status` as global commands. Global commands 
 ### 6. Invite the bot to your server
 
 Generate an invite URL in the Developer Portal under **OAuth2 → URL Generator**:
-- Scope: `applications.commands`
+- Scope: `applications.commands` only — no Bot permissions needed
 - Copy and open the URL to add the bot to your Discord server
+
+The bot only responds to slash command interactions via the webhook URL. It never reads messages, manages the server, or joins voice, so no additional Discord permissions are required.
 
 ### 7. Test
 
