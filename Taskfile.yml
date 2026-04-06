@@ -115,23 +115,15 @@ tasks:
 
   stop-server:
     desc: Stop the EC2 instance (EBS preserved)
-    vars:
-      INSTANCE_ID:
-        sh: bash scripts/get-instance-id.sh
     cmds:
-      - bash scripts/stop-server.sh {{.INSTANCE_ID}}
+      - bash scripts/stop-server.sh
 
   # ── Observe ───────────────────────────────────────────────────────────────
 
   status:
     desc: Show stack, instance, bucket, and server address
-    vars:
-      INSTANCE_ID:
-        sh: bash scripts/get-instance-id.sh
-      BUCKET_NAME:
-        sh: bash scripts/get-bucket-name.sh
     cmds:
-      - bash scripts/status.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+      - bash scripts/status.sh
 
   logs:
     desc: "Tail all Minecraft log streams in parallel (add -- --follow to stream)"

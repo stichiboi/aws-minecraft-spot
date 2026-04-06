@@ -1,43 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
-# Check if a MinecraftServer instance is already pending or running
-EXISTING=$(aws ec2 describe-instances \
-  --filters \
-    "Name=tag:Name,Values=MinecraftServer" \
-    "Name=instance-state-name,Values=pending,running" \
-  --query 'Reservations[0].Instances[0].InstanceId' \
-  --output text)
+TMPFILE=$(mktemp)
+trap 'rm -f "$TMPFILE"' EXIT
 
-if [[ -n "${EXISTING}" && "${EXISTING}" != "None" ]]; then
-  echo "Instance ${EXISTING} is already pending/running."
-  exit 0
-fi
+aws lambda invoke \
+  --function-name minecraft-server-management \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"commandName":"start"}' \
+  "$TMPFILE" > /dev/null
 
-# Look up the public subnet via CDK auto-applied tag
-SUBNET_ID=$(aws ec2 describe-subnets \
-  --filters "Name=tag:Name,Values=MinecraftServer/Vpc/PublicSubnet1" \
-  --query 'Subnets[0].SubnetId' \
-  --output text)
-
-if [[ -z "${SUBNET_ID}" || "${SUBNET_ID}" == "None" ]]; then
-  echo "ERROR: Could not find subnet tagged Name=MinecraftServer/Vpc/PublicSubnet1" >&2
-  exit 1
-fi
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTANCE_TYPE=$(jq -r '.context.instanceType' "${SCRIPT_DIR}/../cdk.json")
-
-echo "Launching new spot instance (${INSTANCE_TYPE}) via launch template MinecraftServer..."
-INSTANCE_ID=$(aws ec2 run-instances \
-  --launch-template "LaunchTemplateName=MinecraftServer,Version=\$Latest" \
-  --instance-type "${INSTANCE_TYPE}" \
-  --subnet-id "${SUBNET_ID}" \
-  --query 'Instances[0].InstanceId' \
-  --output text)
-
-echo "Instance ${INSTANCE_ID} launched. Waiting for running state..."
-aws ec2 wait instance-running --instance-ids "${INSTANCE_ID}"
-
-echo ""
-echo "Instance is running! (ID: ${INSTANCE_ID})"
+jq -r '
+  if .status == "already_running" then
+    "Already running: \(.instanceId)"
+  elif .status == "started" then
+    "Server starting...\nInstance: \(.instanceId) (\(.instanceType))\nConnect:  \(.fqdn):\(.port)"
+  else
+    .
+  end
+' "$TMPFILE"
