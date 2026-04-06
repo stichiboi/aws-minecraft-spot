@@ -34,8 +34,6 @@ Run `task` to list all available tasks.
 | `task upload-mods` | Sync local `mods/*.jar` and `server-config/` to S3 |
 | `task deploy` | Full deploy: bucket → upload → server → status |
 | `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
-| `task logs` | Tail all CloudWatch log streams (add `-- --follow` to stream) |
-| `task logs:server` | Tail a specific stream: `boot` or `server` |
 
 ## Adding Mods
 
@@ -135,7 +133,7 @@ Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** beh
 
 | File | When it runs | Role |
 |---|---|---|
-| `lib/user-data.sh` | First boot only (cloud-init) | Installs jq/nvme-cli/cloudwatch-agent, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
+| `lib/user-data.sh` | First boot only (cloud-init) | Installs jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
 | `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 config/mods, installs Java and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
 
 At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}`, etc., and embeds the per-boot script (base64) into user-data.

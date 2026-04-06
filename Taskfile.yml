@@ -125,13 +125,13 @@ tasks:
     cmds:
       - bash scripts/status.sh
 
-  ssh:
-    desc: "SSH to ec2-user@public IP (optional: task ssh KEY=~/.ssh/key.pem)"
+  ssm:
+    desc: "Run a shell command on the EC2 instance via SSM (e.g. task ssm -- 'df -h')"
     vars:
       INSTANCE_ID:
         sh: bash scripts/get-instance-id.sh
     cmds:
-      - bash scripts/ssh.sh {{.INSTANCE_ID}}{{if ne .KEY ""}} {{.KEY | shellQuote}}{{end}}
+      - bash scripts/ssm.sh {{.INSTANCE_ID}} {{.CLI_ARGS}}
 
   # ── Maintenance ───────────────────────────────────────────────────────────
 

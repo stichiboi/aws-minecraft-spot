@@ -16,7 +16,7 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `scripts/start-server.sh` | Invoke `minecraft-server-management` Lambda (start) |
 | `scripts/stop-server.sh` | Invoke `minecraft-server-management` Lambda (stop) |
 | `scripts/status.sh` | Invoke `minecraft-server-management` Lambda (status) + show bucket |
-| `scripts/ssh.sh` | SSH into instance |
+| `scripts/ssm.sh` | Run a shell command on the instance via SSM and print output |
 | `scripts/reset-world.sh` | Delete world folders on running instance via SSM and restart |
 | `server-paths.txt` | Gitignored: extra server paths for world reset and backup (relative to server dir) |
 | `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks |
@@ -34,4 +34,4 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 ## Rules
 - **After any structural refactor** (moving files, renaming scripts, changing stack layout), update the File Map above.
 - EC2 boot scripts stay as bash in `lib/`. Dev-machine scripts stay as `.sh` in `scripts/`.
-- `start-server.sh`, `stop-server.sh`, `status.sh` delegate to the `minecraft-server-management` Lambda — no direct EC2 calls. Other scripts (`ssh.sh`, `sync-mods.sh`, etc.) still call AWS CLI directly and resolve instanceId/bucketName themselves.
+- `start-server.sh`, `stop-server.sh`, `status.sh` delegate to the `minecraft-server-management` Lambda — no direct EC2 calls. Other scripts (`ssm.sh`, `sync-mods.sh`, etc.) still call AWS CLI directly and resolve instanceId/bucketName themselves.
