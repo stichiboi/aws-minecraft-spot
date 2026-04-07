@@ -2,6 +2,8 @@ import type {
   WorkerPayload,
   CommandResult,
   ServerStats,
+  SeriesMetric,
+  ScalarMetric,
   MetricPoint,
 } from "./types";
 import { runCommand, type CommandName } from "./server-management";
@@ -22,48 +24,51 @@ function sparkline(
     .join("");
 }
 
-function formatStats(stats: ServerStats): string {
-  const cpuAvg =
-    stats.cpu.length > 0
-      ? (stats.cpu.reduce((s, p) => s + p.value, 0) / stats.cpu.length).toFixed(
-          1
-        ) + "%"
-      : "N/A";
-  const netIn =
-    stats.networkIn.length > 0
-      ? (stats.networkIn.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(
-          1
-        ) + " MB"
-      : "N/A";
-  const netOut =
-    stats.networkOut.length > 0
-      ? (stats.networkOut.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(
-          1
-        ) + " MB"
-      : "N/A";
+function formatSeries(
+  metric: SeriesMetric,
+  opts: {
+    sparkLimits?: { min: number; max: number };
+    summarize: (pts: MetricPoint[]) => string;
+  }
+): { graph: string; summary: string } {
+  if ("error" in metric) {
+    return { graph: "error", summary: metric.error };
+  }
+  return {
+    graph: sparkline(metric.values, opts.sparkLimits),
+    summary: metric.values.length > 0 ? opts.summarize(metric.values) : "N/A",
+  };
+}
 
-  const ram =
-    stats.ramUsedGb !== null
-      ? `${stats.ramUsedGb} GB${
-          stats.ramTotalGb !== null ? ` / ${stats.ramTotalGb} GB` : ""
-        }`
-      : "N/A";
-  const disk =
-    stats.diskUsedGb !== null
-      ? `${stats.diskUsedGb} GB${
-          stats.diskTotalGb !== null ? ` / ${stats.diskTotalGb} GB` : ""
-        }`
-      : "N/A";
+function formatScalar(metric: ScalarMetric): string {
+  if ("error" in metric) return `error: ${metric.error}`;
+  return `${metric.value} GB${metric.max !== undefined ? ` / ${metric.max} GB` : ""}`;
+}
+
+function formatStats(stats: ServerStats): string {
+  const cpu = formatSeries(stats.cpu, {
+    sparkLimits: { min: 0, max: 100 },
+    summarize: (pts) => {
+      const avg = pts.reduce((s, p) => s + p.value, 0) / pts.length;
+      const max = Math.max(...pts.map((p) => p.value));
+      return `avg ${avg.toFixed(1)}%  max ${max.toFixed(1)}%`;
+    },
+  });
+  const netIn = formatSeries(stats.networkIn, {
+    summarize: (pts) =>
+      (pts.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(1) + " MB",
+  });
+  const netOut = formatSeries(stats.networkOut, {
+    summarize: (pts) =>
+      (pts.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(1) + " MB",
+  });
 
   return [
-    `> \`CPU (1h):     ${sparkline(stats.cpu, {
-      max: 100,
-      min: 0,
-    })}\`  avg ${cpuAvg}`,
-    `> \`Net in (1h):  ${sparkline(stats.networkIn)}\`  ${netIn}`,
-    `> \`Net out (1h): ${sparkline(stats.networkOut)}\`  ${netOut}`,
-    `> **RAM:** ${ram}`,
-    `> **Disk:** ${disk}`,
+    `> \`CPU (1h):     ${cpu.graph}\`  ${cpu.summary}`,
+    `> \`Net in (1h):  ${netIn.graph}\`  ${netIn.summary}`,
+    `> \`Net out (1h): ${netOut.graph}\`  ${netOut.summary}`,
+    `> **RAM:** ${formatScalar(stats.ram)}`,
+    `> **Disk:** ${formatScalar(stats.disk)}`,
   ].join("\n");
 }
 

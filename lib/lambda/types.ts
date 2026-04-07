@@ -23,18 +23,19 @@ export type McStatus = "ready" | "starting" | "offline" | "unknown";
 
 export type MetricPoint = { timestamp: string; value: number };
 
-export type SsmMetrics = {
-  ramUsedGb: number | null; // current, via SSM
-  ramTotalGb: number | null; // total, via SSM
-  diskUsedGb: number | null; // current (/opt/minecraft/data), via SSM
-  diskTotalGb: number | null; // total (/opt/minecraft/data), via SSM
-};
+// A time-series metric (e.g. CPU, network) — either a list of data points or an error.
+export type SeriesMetric = { error: string } | { values: MetricPoint[] };
+
+// A scalar metric (e.g. RAM, disk) — either a current value with optional maximum, or an error.
+export type ScalarMetric = { error: string } | { value: number; max?: number };
 
 export type ServerStats = {
-  cpu: MetricPoint[]; // % utilization, Average, last 1h
-  networkIn: MetricPoint[]; // bytes, Sum, last 1h
-  networkOut: MetricPoint[]; // bytes, Sum, last 1h
-} & SsmMetrics;
+  cpu: SeriesMetric; // % utilization, Average, last 1h
+  networkIn: SeriesMetric; // bytes, Sum, last 1h
+  networkOut: SeriesMetric; // bytes, Sum, last 1h
+  ram: ScalarMetric; // used GB (max = total GB), via SSM
+  disk: ScalarMetric; // used GB on /opt/minecraft/data (max = total GB), via SSM
+};
 
 export type StatusResult =
   | { status: "not_found" }
