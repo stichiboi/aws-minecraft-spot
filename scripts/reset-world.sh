@@ -41,9 +41,11 @@ COMMANDS=(
   "echo 'World folders deleted.'"
 )
 
-for p in "${EXTRA_PATHS[@]}"; do
-  COMMANDS+=("rm -rf '${SERVER_DIR}/${p}' && echo 'Deleted: ${p}' || echo 'Not found (skipped): ${p}'")
-done
+if [[ ${#EXTRA_PATHS[@]} -gt 0 ]]; then
+  for p in "${EXTRA_PATHS[@]}"; do
+    COMMANDS+=("rm -rf '${SERVER_DIR}/${p}' && echo 'Deleted: ${p}' || echo 'Not found (skipped): ${p}'")
+  done
+fi
 
 COMMANDS+=(
   "systemctl start minecraft.service"

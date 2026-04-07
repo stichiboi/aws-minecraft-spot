@@ -137,7 +137,9 @@ function formatForDiscord(
         `> **Address:** \`${r.fqdn}\``,
         `> **Server:** ${mcLabel}`,
       ];
-      if (r.stats) {
+      if (r.statusChecksInitializing) {
+        lines.push(`> ─────────────`, `> ⏳ Instance is initializing, stats unavailable.`);
+      } else if (r.stats) {
         lines.push(`> ─────────────`, formatStats(r.stats));
       }
       return lines.join("\n");

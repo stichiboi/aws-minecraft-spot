@@ -48,6 +48,7 @@ export type StatusResult =
       fqdn: string;
       mcStatus: McStatus;
       stats?: ServerStats;
+      statusChecksInitializing?: boolean;
     };
 
 export type CommandResult = StartResult | StopResult | StatusResult;

@@ -2,6 +2,7 @@ import * as net from "net";
 import {
   EC2Client,
   DescribeInstancesCommand,
+  DescribeInstanceStatusCommand,
   RunInstancesCommand,
   TerminateInstancesCommand,
   CancelSpotInstanceRequestsCommand,
@@ -318,6 +319,21 @@ async function getSsmMetrics(instanceId: string): Promise<SsmResult> {
   return failed("timed out waiting for SSM result");
 }
 
+async function isInstanceInitializing(instanceId: string): Promise<boolean> {
+  try {
+    const res = await ec2.send(
+      new DescribeInstanceStatusCommand({ InstanceIds: [instanceId] })
+    );
+    const s = res.InstanceStatuses?.[0];
+    return (
+      s?.InstanceStatus?.Status === "initializing" ||
+      s?.SystemStatus?.Status === "initializing"
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function getStats(instanceId: string): Promise<ServerStats> {
   const now = new Date();
   const startTime = new Date(now.getTime() - 60 * 60 * 1000);
@@ -365,6 +381,20 @@ async function getStatus(): Promise<StatusResult> {
   }
 
   if (instanceState === "running") {
+    const initializing = await isInstanceInitializing(instanceId);
+    if (initializing) {
+      console.log("getStatus: instance status checks still initializing, skipping stats");
+      return {
+        status: "found",
+        instanceId,
+        instanceType,
+        instanceState,
+        publicIp,
+        fqdn: SERVER_FQDN,
+        mcStatus,
+        statusChecksInitializing: true,
+      };
+    }
     console.log("getStatus: fetching server stats", { instanceId });
     const stats = await getStats(instanceId);
     return {
