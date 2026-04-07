@@ -16,6 +16,7 @@ echo ""
 if [[ "${CONFIRM}" == "yes" ]]; then
   npx cdk destroy MinecraftServer --force "$@"
   npx cdk destroy MinecraftBucket --force "$@"
+  npx cdk destroy MinecraftApi --force "$@"
   echo ""
   echo "✓ All stacks destroyed."
 else
