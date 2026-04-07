@@ -230,12 +230,12 @@ type SsmResult = { ram: ScalarMetric; disk: ScalarMetric };
 
 async function getSsmMetrics(instanceId: string): Promise<SsmResult> {
   const cmd = [
-    'printf "RAM_USED=%.2f\\nRAM_TOTAL=%.2f\\n"',
-    '  "$(free -m | awk \'/^Mem:/{printf "%.2f",$3/1024}\')"',
+    'printf "RAM_USED=%.2f\\nRAM_TOTAL=%.2f\\n" \\',
+    '  "$(free -m | awk \'/^Mem:/{printf "%.2f",$3/1024}\')" \\',
     '  "$(free -m | awk \'/^Mem:/{printf "%.2f",$2/1024}\')"',
     "if mountpoint -q /opt/minecraft/data 2>/dev/null; then",
-    '  printf "DISK_USED=%.2f\\nDISK_TOTAL=%.2f\\n"',
-    "    \"$(df /opt/minecraft/data --output=used -BM | tail -1 | tr -d 'M' | awk '{printf \"%.2f\",$1/1024}')\"",
+    '  printf "DISK_USED=%.2f\\nDISK_TOTAL=%.2f\\n" \\',
+    "    \"$(df /opt/minecraft/data --output=used -BM | tail -1 | tr -d 'M' | awk '{printf \"%.2f\",$1/1024}')\" \\",
     "    \"$(df /opt/minecraft/data --output=size -BM | tail -1 | tr -d 'M' | awk '{printf \"%.2f\",$1/1024}')\"",
     "else",
     '  echo "DISK_ERROR=data volume not mounted"',

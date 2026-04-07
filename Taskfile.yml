@@ -81,6 +81,8 @@ tasks:
     desc: Destroy MinecraftServer + MinecraftBucket stacks (interactive confirm; deletes all resources)
     cmds:
       - bash scripts/destroy.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
+      # clear the Taskfile cache
+      - rm -f .task/checksum/upload-mods
 
   # ── Mods / Config ─────────────────────────────────────────────────────────
 

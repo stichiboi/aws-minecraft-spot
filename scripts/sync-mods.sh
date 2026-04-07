@@ -54,4 +54,3 @@ fi
 
 echo ""
 echo "✓ Mods synced and server restarted."
-echo "  Run 'task logs:server -- --follow' to watch the server come back up."

@@ -99,4 +99,3 @@ fi
 
 echo ""
 echo "✓ World reset complete. Server is restarting with a fresh world."
-echo "  Run 'task logs:server -- --follow' to watch the server come back up."
