@@ -12,7 +12,8 @@ export type StartResult =
       fqdn: string;
       port: number;
     }
-  | { status: "already_running"; instanceId: string };
+  | { status: "already_running"; instanceId: string }
+  | { status: "volume_in_use"; volumeId: string };
 
 export type StopResult =
   | { status: "stopped"; instanceId: string }

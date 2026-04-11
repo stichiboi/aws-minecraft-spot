@@ -3,6 +3,7 @@ import {
   EC2Client,
   DescribeInstancesCommand,
   DescribeInstanceStatusCommand,
+  DescribeVolumesCommand,
   RunInstancesCommand,
   TerminateInstancesCommand,
   CancelSpotInstanceRequestsCommand,
@@ -41,6 +42,7 @@ const LAUNCH_TEMPLATE_NAME =
 const MINECRAFT_PORT = Number(process.env.MINECRAFT_PORT ?? "25565");
 const SERVER_FQDN = process.env.SERVER_FQDN ?? "";
 const INSTANCE_TYPE = process.env.INSTANCE_TYPE ?? "r3.large";
+const DATA_VOLUME_TAG = process.env.DATA_VOLUME_TAG ?? "MinecraftData";
 
 const STATE_PRIORITY: Record<string, number> = {
   running: 0,
@@ -91,6 +93,17 @@ function probePort(
   });
 }
 
+async function getDataVolumeState(): Promise<{ volumeId: string; state: string } | null> {
+  const res = await ec2.send(
+    new DescribeVolumesCommand({
+      Filters: [{ Name: "tag:Name", Values: [DATA_VOLUME_TAG] }],
+    })
+  );
+  const vol = res.Volumes?.[0];
+  if (!vol?.VolumeId) return null;
+  return { volumeId: vol.VolumeId, state: vol.State ?? "unknown" };
+}
+
 async function startServer(): Promise<StartResult> {
   console.log("startServer: checking for existing pending/running instance", {
     tag: INSTANCE_TAG,
@@ -110,6 +123,15 @@ async function startServer(): Promise<StartResult> {
       instanceId: existingId,
     });
     return { status: "already_running", instanceId: existingId };
+  }
+
+  console.log("startServer: checking data volume availability", {
+    tag: DATA_VOLUME_TAG,
+  });
+  const vol = await getDataVolumeState();
+  if (vol && vol.state !== "available") {
+    console.log("startServer: data volume not available", vol);
+    return { status: "volume_in_use", volumeId: vol.volumeId };
   }
 
   console.log("startServer: no existing instance, looking up subnet", {

@@ -22,6 +22,7 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks |
 | `server-config/` | server.properties, config.json, jvm-args.txt |
 | `mods/` | Minecraft mod JARs (uploaded to S3) |
+| `mods-config/` | Mod config files synced to S3 and deployed to server/config/ on the instance |
 | `Taskfile.yml` | All runnable tasks — source of truth for workflow |
 | `lib/minecraft-api-stack.ts` | CDK stack: API Gateway + Lambda functions |
 | `lib/lambda/server-management.ts` | Lambda: EC2 start/stop/status logic — directly invocable |

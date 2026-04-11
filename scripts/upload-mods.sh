@@ -22,4 +22,13 @@ else
 fi
 
 echo ""
+MODS_CONFIG_DIR="${PROJECT_DIR}/mods-config"
+if [[ ! -d "${MODS_CONFIG_DIR}" ]]; then
+  echo "▸ No mods-config/ folder found — skipping mod config sync."
+else
+  echo "▸ Syncing mods-config/ to s3://${BUCKET_NAME}/mods-config/..."
+  aws s3 sync "${MODS_CONFIG_DIR}/" "s3://${BUCKET_NAME}/mods-config/" --delete
+fi
+
+echo ""
 echo "✓ Upload complete."

@@ -94,6 +94,8 @@ tasks:
     sources:
       - scripts/upload-mods.sh
       - ./mods/*.jar
+      - ./server-config/**/*
+      - ./mods-config/**/*
     cmds:
       - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
 
@@ -134,6 +136,14 @@ tasks:
         sh: bash scripts/get-instance-id.sh
     cmds:
       - bash scripts/ssm.sh {{.INSTANCE_ID}} {{.CLI_ARGS}}
+
+  rcon:
+    desc: "Run an RCON command on the Minecraft server (e.g. task rcon -- 'op username')"
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+    cmds:
+      - bash scripts/rcon.sh {{.INSTANCE_ID}} {{.CLI_ARGS}}
 
   # ── Maintenance ───────────────────────────────────────────────────────────
 

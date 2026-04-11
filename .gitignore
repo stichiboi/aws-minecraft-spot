@@ -6,6 +6,7 @@ cdk.out/
 .DS_Store
 
 mods/
+mods-config/
 
 *.js
 !jest.config.js

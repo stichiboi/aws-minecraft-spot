@@ -104,7 +104,7 @@ if ! mountpoint -q "${MC_DATA}"; then
   echo "Mounted ${REAL_DEVICE} at ${MC_DATA}"
 fi
 
-mkdir -p "${SERVER_DIR}" "${CONFIG_DIR}" "${MODS_DIR}"
+mkdir -p "${SERVER_DIR}" "${CONFIG_DIR}" "${MODS_DIR}" "${SERVER_DIR}/config"
 
 # ── Update Route53 A record ────────────────────────────────────
 echo "Updating DNS: ${FQDN} -> ${PUBLIC_IP}"
@@ -203,6 +203,9 @@ fi
 
 # ── Sync mods from S3 ─────────────────────────────────────────
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
+
+# ── Sync mod configs from S3 ──────────────────────────────────
+aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete
 
 # ── EULA + server.properties ──────────────────────────────────
 echo "eula=true" > "${SERVER_DIR}/eula.txt"

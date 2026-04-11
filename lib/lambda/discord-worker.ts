@@ -9,6 +9,7 @@ import type {
 import { runCommand, type CommandName } from "./server-management";
 
 const SPARKS = "▁▂▃▄▅▆▇█";
+const DISCORD_API = "https://discord.com/api/v10";
 
 function sparkline(
   pts: MetricPoint[],
@@ -42,7 +43,9 @@ function formatSeries(
 
 function formatScalar(metric: ScalarMetric): string {
   if ("error" in metric) return `error: ${metric.error}`;
-  return `${metric.value} GB${metric.max !== undefined ? ` / ${metric.max} GB` : ""}`;
+  return `${metric.value} GB${
+    metric.max !== undefined ? ` / ${metric.max} GB` : ""
+  }`;
 }
 
 function formatStats(stats: ServerStats): string {
@@ -92,64 +95,44 @@ function formatForDiscord(
   commandName: CommandName,
   result: CommandResult
 ): string {
-  if (commandName === "start") {
-    const r = result as Extract<
-      CommandResult,
-      { status: "started" | "already_running" }
-    >;
-    if (r.status === "already_running") {
-      return `⚠️ Instance \`${r.instanceId}\` is already pending/running.`;
-    }
-    if (r.status === "started") {
-      return `🚀 **Server is starting!**\n> Instance: \`${r.instanceId}\` (${r.instanceType})\n> Connect: \`${r.fqdn}:${r.port}\``;
-    }
-  }
-
-  if (commandName === "stop") {
-    const r = result as Extract<
-      CommandResult,
-      { status: "stopped" | "already_terminating" | "not_found" }
-    >;
-    if (r.status === "not_found") return "⭕ No running instance found.";
-    if (r.status === "already_terminating")
-      return `⭕ Instance \`${r.instanceId}\` is already terminating.`;
-    if (r.status === "stopped")
-      return `🛑 **Server stopped.** Instance \`${r.instanceId}\` is terminating.`;
-  }
-
-  if (commandName === "status") {
-    const r = result as Extract<
-      CommandResult,
-      { status: "not_found" | "found" }
-    >;
-    if (r.status === "not_found")
-      return "⭕ **Server is offline.** No instance found.";
-    if (r.status === "found") {
-      const stateLabel = `${STATE_EMOJI[r.instanceState] ?? "❓"} ${
-        r.instanceState
-      }`;
-      const mcLabel = `${MC_STATUS_EMOJI[r.mcStatus] ?? "❓"} ${r.mcStatus}`;
+  switch (result.status) {
+    case "started":
+      return `🚀 **Server is starting!**\n> Instance: \`${result.instanceId}\` (${result.instanceType})\n> Connect: \`${result.fqdn}:${result.port}\``;
+    case "already_running":
+      return `⚠️ Instance \`${result.instanceId}\` is already pending/running.`;
+    case "volume_in_use":
+      return `⚠️ Cannot start: data volume \`${result.volumeId}\` is still attached to the previous instance. Wait a moment and try again.`;
+    case "stopped":
+      return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.`;
+    case "already_terminating":
+      return `⭕ Instance \`${result.instanceId}\` is already terminating.`;
+    case "not_found":
+      return commandName === "stop"
+        ? "⭕ No running instance found."
+        : "⭕ **Server is offline.** No instance found.";
+    case "found": {
+      const stateLabel = `${STATE_EMOJI[result.instanceState] ?? "❓"} ${result.instanceState}`;
+      const mcLabel = `${MC_STATUS_EMOJI[result.mcStatus] ?? "❓"} ${result.mcStatus}`;
       const lines = [
         `📡 **Minecraft Server Status**`,
-        `> **Instance:** \`${r.instanceId}\` (${r.instanceType})`,
+        `> **Instance:** \`${result.instanceId}\` (${result.instanceType})`,
         `> **State:** ${stateLabel}`,
-        `> **IP:** \`${r.publicIp}\``,
-        `> **Address:** \`${r.fqdn}\``,
+        `> **IP:** \`${result.publicIp}\``,
+        `> **Address:** \`${result.fqdn}\``,
         `> **Server:** ${mcLabel}`,
       ];
-      if (r.statusChecksInitializing) {
-        lines.push(`> ─────────────`, `> ⏳ Instance is initializing, stats unavailable.`);
-      } else if (r.stats) {
-        lines.push(`> ─────────────`, formatStats(r.stats));
+      if (result.statusChecksInitializing) {
+        lines.push(
+          `> ─────────────`,
+          `> ⏳ Instance is initializing, stats unavailable.`
+        );
+      } else if (result.stats) {
+        lines.push(`> ─────────────`, formatStats(result.stats));
       }
       return lines.join("\n");
     }
   }
-
-  return `Unexpected result: \`${JSON.stringify(result)}\``;
 }
-
-const DISCORD_API = "https://discord.com/api/v10";
 
 async function sendFollowUp(
   applicationId: string,

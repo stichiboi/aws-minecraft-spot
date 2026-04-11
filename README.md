@@ -27,10 +27,11 @@ Run `task` to list all available tasks.
 
 | Command | What it does |
 |---|---|
+| `task rcon` | Runs an `rcon` command on the minecraft server. Use this to add a player to the operator list `task rcon -- "op Stichiboi"` |
 | `task status` | Instance state, public IP, DNS name, S3 bucket |
 | `task start-server` | Start a stopped instance (per-boot logic runs on boot) |
 | `task stop-server` | Stop the instance; **data EBS stays attached until next start** |
-| `task ssh` | SSH to `ec2-user@` current public IP (`task ssh KEY=~/.ssh/key.pem` to specify a key) |
+| `task ssm` | runs an SSM command on the EC2 instance |
 | `task upload-mods` | Sync local `mods/*.jar` and `server-config/` to S3 |
 | `task deploy` | Full deploy: bucket → upload → server → status |
 | `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
@@ -41,6 +42,17 @@ Run `task` to list all available tasks.
 2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server (no SSH needed).
 
 Or to apply on next boot only (e.g. the server is offlilne): `task upload-mods`.
+
+## Mod Configuration
+
+Put mod config files (`.toml`, `.json`, `.cfg`, etc.) in `mods-config/` at the project root. These are synced to `s3://BUCKET/mods-config/` and land at `/opt/minecraft/data/server/config/` on the instance — the standard mod config directory, sibling to `mods/`.
+
+```bash
+task sync-mods    # uploads mods-config/ to S3, pushes to the running instance, and restarts the minecraft server
+task upload-mods  # uploads only (apply on next boot)
+```
+
+The sync uses `--delete`, so S3 (and therefore the instance) always mirrors your local `mods-config/` folder exactly. If the folder doesn't exist locally, the upload step is skipped silently.
 
 ## Customizing the Server
 
@@ -101,6 +113,19 @@ Edit `server-config/jvm-args.txt` — one flag per line:
 | r5.xlarge  | 32 GB | `26G`               |
 
 To apply changes to a running instance: `task sync-mods` (uploads to S3 and pushes to the instance via SSM, no SSH or reboot needed).
+
+## RCON
+
+Run in-game console commands from your dev machine via SSM (no SSH, no exposed ports).
+
+```bash
+task rcon -- 'list'         # show online players
+task rcon -- 'op [username]'  # make a player an operator
+```
+
+RCON runs on `localhost:25575` inside the instance — the security group never opens this port. The password (`password`) is not a real secret; the only path to RCON is through SSM, which requires AWS credentials.
+
+The `rcon` binary ([gorcon/rcon-cli](https://github.com/gorcon/rcon-cli)) is downloaded to the instance on first use.
 
 ## Discord bot
 
