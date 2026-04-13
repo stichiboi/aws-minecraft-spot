@@ -35,6 +35,8 @@ export class MinecraftApiStack extends cdk.Stack {
     const ec2Policy = new iam.PolicyStatement({
       actions: [
         "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeVolumes",
         "ec2:RunInstances",
         "ec2:TerminateInstances",
         "ec2:CancelSpotInstanceRequests",
@@ -76,7 +78,7 @@ export class MinecraftApiStack extends cdk.Stack {
       functionName: "minecraft-server-management",
       entry: "lib/lambda/server-management.ts",
       runtime: Runtime.NODEJS_20_X,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(45),
       logGroup: serverManagementLogGroup,
       environment: ec2Environment,
     });
@@ -90,7 +92,7 @@ export class MinecraftApiStack extends cdk.Stack {
       functionName: "minecraft-discord-worker",
       entry: "lib/lambda/discord-worker.ts",
       runtime: Runtime.NODEJS_20_X,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(45),
       logGroup: workerLogGroup,
       environment: {
         DISCORD_BOT_TOKEN: props.discordBotToken,

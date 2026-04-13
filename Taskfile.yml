@@ -73,7 +73,7 @@ tasks:
       - bash scripts/deploy-instance.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
   deploy-api:
-    internal: true
+    internal: false
     desc: Deploy the MinecraftApi stack (API Gateway, Lambda)
     cmds:
       - bash scripts/deploy-api.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}

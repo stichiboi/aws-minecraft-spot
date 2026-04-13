@@ -12,9 +12,10 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `lib/per-boot.sh` | EC2 boot script (runs on every start) |
 | `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, shuts down after inactivity |
 | `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
+| `lib/status_query.py` | EC2 status collector: RCON /list, journal errors/warnings, RAM, disk — outputs JSON (uploaded to S3, pulled at boot) |
 | `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor.sh into CDK asset via heredocs |
 | `scripts/upload-server.sh` | Download MC server JAR + upload server files (JAR, config, rcon) to S3 |
-| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, rcon_query.py to S3 |
+| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, rcon_query.py, status_query.py to S3 |
 | `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |
 | `scripts/sync-server.sh` | Sync server files from S3 to running instance via SSM (no restart) |
 | `scripts/sync-mods.sh` | Sync mods + mod configs from S3 to running instance via SSM (no restart) |

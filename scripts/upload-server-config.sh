@@ -24,10 +24,11 @@ else
   echo "▸ No resources/server/ folder found — skipping server config upload."
 fi
 
-# ── RCON helper ───────────────────────────────────────────────────────────
+# ── Tools (RCON helper, status query) ─────────────────────────────────────
 echo ""
-echo "▸ Uploading RCON helper to s3://${BUCKET_NAME}/tools/..."
+echo "▸ Uploading tools to s3://${BUCKET_NAME}/tools/..."
 aws s3 cp "${PROJECT_DIR}/lib/rcon_query.py" "s3://${BUCKET_NAME}/tools/rcon_query.py"
+aws s3 cp "${PROJECT_DIR}/lib/status_query.py" "s3://${BUCKET_NAME}/tools/status_query.py"
 
 echo ""
 echo "✓ Server config upload complete."

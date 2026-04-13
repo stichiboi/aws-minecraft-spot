@@ -126,7 +126,8 @@ aws s3 sync "s3://${BUCKET_NAME}/server-bin/" "${SERVER_DIR}/" \
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
 aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete
 aws s3 cp "s3://${BUCKET_NAME}/tools/rcon_query.py" /opt/minecraft/rcon_query.py
-chmod +x /opt/minecraft/rcon_query.py
+aws s3 cp "s3://${BUCKET_NAME}/tools/status_query.py" /opt/minecraft/status_query.py
+chmod +x /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py
 
 echo "eula=true" > "${SERVER_DIR}/eula.txt"
 

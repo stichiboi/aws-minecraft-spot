@@ -19,7 +19,8 @@ COMMAND_ID=$(aws ssm send-command \
     \"aws s3 cp s3://${BUCKET_NAME}/server/jvm-args.txt /opt/minecraft/data/server/jvm-args.txt || true\",
     \"aws s3 cp s3://${BUCKET_NAME}/server/server.properties /opt/minecraft/data/server/server.properties || true\",
     \"aws s3 cp s3://${BUCKET_NAME}/tools/rcon_query.py /opt/minecraft/rcon_query.py && chmod +x /opt/minecraft/rcon_query.py\",
-    \"chown -R minecraft:minecraft /opt/minecraft/data /opt/minecraft/rcon_query.py\",
+    \"aws s3 cp s3://${BUCKET_NAME}/tools/status_query.py /opt/minecraft/status_query.py && chmod +x /opt/minecraft/status_query.py\",
+    \"chown -R minecraft:minecraft /opt/minecraft/data /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py\",
     \"echo 'Server files synced.'\"
   ]" \
   --query 'Command.CommandId' \

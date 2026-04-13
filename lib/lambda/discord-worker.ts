@@ -4,6 +4,8 @@ import type {
   ServerStats,
   SeriesMetric,
   ScalarMetric,
+  RconStatus,
+  LogSnippet,
   MetricPoint,
 } from "./types";
 import { runCommand, type CommandName } from "./server-management";
@@ -48,6 +50,29 @@ function formatScalar(metric: ScalarMetric): string {
   }`;
 }
 
+function formatRcon(rcon: RconStatus): string {
+  if ("error" in rcon) return `error: ${rcon.error}`;
+  const names = rcon.players.length > 0 ? ` — ${rcon.players.join(", ")}` : "";
+  return `${rcon.online}/${rcon.max}${names}`;
+}
+
+function formatLogs(logs: LogSnippet, charBudget: number): string {
+  if ("error" in logs) return `> ⚠️ **Logs:** ${logs.error}`;
+  if (logs.lines.length === 0) return "> ✅ No recent errors or warnings";
+  const header = `> ⚠️ **Logs (${logs.lines.length} warning${logs.lines.length === 1 ? "" : "s"}):**\n`;
+  const spoilerOverhead = header.length + "||\n```\n".length + "\n```\n||".length;
+  let budget = charBudget - spoilerOverhead;
+  const kept: string[] = [];
+  for (let i = logs.lines.length - 1; i >= 0 && kept.length < 10; i--) {
+    const line = logs.lines[i];
+    if (line.length + 1 > budget) break;
+    budget -= line.length + 1;
+    kept.unshift(line);
+  }
+  if (kept.length === 0) return `> ⚠️ **Logs:** lines too long to display`;
+  return `${header}||\`\`\`\n${kept.join("\n")}\n\`\`\`||`;
+}
+
 function formatStats(stats: ServerStats): string {
   const cpu = formatSeries(stats.cpu, {
     sparkLimits: { min: 0, max: 100 },
@@ -66,13 +91,27 @@ function formatStats(stats: ServerStats): string {
       (pts.reduce((s, p) => s + p.value, 0) / 1_048_576).toFixed(1) + " MB",
   });
 
-  return [
+  const lines = [
     `> \`CPU (1h):     ${cpu.graph}\`  ${cpu.summary}`,
     `> \`Net in (1h):  ${netIn.graph}\`  ${netIn.summary}`,
     `> \`Net out (1h): ${netOut.graph}\`  ${netOut.summary}`,
     `> **RAM:** ${formatScalar(stats.ram)}`,
     `> **Disk:** ${formatScalar(stats.disk)}`,
-  ].join("\n");
+  ];
+
+  if (stats.rcon) {
+    lines.push(`> **Players:** ${formatRcon(stats.rcon)}`);
+  }
+
+  if (stats.logs) {
+    const usedChars = lines.join("\n").length;
+    const logBudget = 1900 - usedChars;
+    if (logBudget > 50) {
+      lines.push(`> ─────────────`, formatLogs(stats.logs, logBudget));
+    }
+  }
+
+  return lines.join("\n");
 }
 
 const STATE_EMOJI: Record<string, string> = {

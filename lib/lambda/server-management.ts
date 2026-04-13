@@ -26,6 +26,8 @@ import type {
   ServerStats,
   SeriesMetric,
   ScalarMetric,
+  RconStatus,
+  LogSnippet,
   CommandResult,
   McStatus,
 } from "./types";
@@ -249,25 +251,19 @@ async function getCwMetric(
   }
 }
 
-type SsmResult = { ram: ScalarMetric; disk: ScalarMetric };
+type StatusQueryResult = {
+  ram: ScalarMetric;
+  disk: ScalarMetric;
+  rcon: RconStatus;
+  logs: LogSnippet;
+};
 
-async function getSsmMetrics(instanceId: string): Promise<SsmResult> {
-  const cmd = [
-    'printf "RAM_USED=%.2f\\nRAM_TOTAL=%.2f\\n" \\',
-    '  "$(free -m | awk \'/^Mem:/{printf "%.2f",$3/1024}\')" \\',
-    '  "$(free -m | awk \'/^Mem:/{printf "%.2f",$2/1024}\')"',
-    "if mountpoint -q /opt/minecraft/data 2>/dev/null; then",
-    '  printf "DISK_USED=%.2f\\nDISK_TOTAL=%.2f\\n" \\',
-    "    \"$(df /opt/minecraft/data --output=used -BM | tail -1 | tr -d 'M' | awk '{printf \"%.2f\",$1/1024}')\" \\",
-    "    \"$(df /opt/minecraft/data --output=size -BM | tail -1 | tr -d 'M' | awk '{printf \"%.2f\",$1/1024}')\"",
-    "else",
-    '  echo "DISK_ERROR=data volume not mounted"',
-    "fi",
-  ].join("\n");
-
-  const failed = (reason: string): SsmResult => ({
+async function getStatusQuery(instanceId: string): Promise<StatusQueryResult> {
+  const failed = (reason: string): StatusQueryResult => ({
     ram: { error: reason },
     disk: { error: reason },
+    rcon: { error: reason },
+    logs: { error: reason },
   });
 
   let commandId: string;
@@ -276,18 +272,17 @@ async function getSsmMetrics(instanceId: string): Promise<SsmResult> {
       new SendCommandCommand({
         InstanceIds: [instanceId],
         DocumentName: "AWS-RunShellScript",
-        Parameters: { commands: [cmd] },
+        Parameters: { commands: ["python3 /opt/minecraft/status_query.py"] },
       })
     );
     commandId = send.Command?.CommandId ?? "";
     if (!commandId) return failed("SSM command returned no ID");
   } catch (err) {
-    console.warn("getSsmMetrics: SendCommand failed", err);
+    console.warn("getStatusQuery: SendCommand failed", err);
     return failed((err as Error).message);
   }
 
-  for (let i = 0; i < 8; i++) {
-    // there is a delay between the command being sent and the actual execution
+  for (let i = 0; i < 10; i++) {
     await new Promise((r) => setTimeout(r, 1500));
     try {
       const inv = await ssm.send(
@@ -298,47 +293,72 @@ async function getSsmMetrics(instanceId: string): Promise<SsmResult> {
       );
       if (inv.Status === "Success") {
         const output = inv.StandardOutputContent ?? "";
-        const parseNum = (key: string) => {
-          const v = parseFloat(
-            output.match(new RegExp(`${key}=([\\d.]+)`))?.[1] ?? ""
-          );
-          return isNaN(v) ? null : v;
-        };
-
-        const ramUsed = parseNum("RAM_USED");
-        const ramTotal = parseNum("RAM_TOTAL");
-        const ram: ScalarMetric =
-          ramUsed !== null
-            ? { value: ramUsed, ...(ramTotal !== null && { max: ramTotal }) }
-            : { error: "could not parse RAM metrics" };
-
-        const diskError = output.match(/DISK_ERROR=(.+)/)?.[1]?.trim();
-        const diskUsed = parseNum("DISK_USED");
-        const diskTotal = parseNum("DISK_TOTAL");
-        const disk: ScalarMetric = diskError
-          ? { error: diskError }
-          : diskUsed !== null
-          ? { value: diskUsed, ...(diskTotal !== null && { max: diskTotal }) }
-          : { error: "could not parse disk metrics" };
-
-        return { ram, disk };
+        try {
+          const parsed = JSON.parse(output);
+          return {
+            ram: parseScalarFromQuery(parsed.ram),
+            disk: parseScalarFromQuery(parsed.disk),
+            rcon: parseRconFromQuery(parsed.rcon),
+            logs: parseLogsFromQuery(parsed.logs),
+          };
+        } catch (parseErr) {
+          console.warn("getStatusQuery: failed to parse JSON", output);
+          return failed("failed to parse status_query.py output");
+        }
       }
       if (
         inv.Status === "Failed" ||
         inv.Status === "TimedOut" ||
         inv.Status === "Cancelled"
       ) {
-        console.warn("getSsmMetrics: command ended with status", inv.Status);
-        return failed(`SSM command ${inv.Status.toLowerCase()}`);
+        const stderr = inv.StandardErrorContent?.trim() ?? "";
+        const stdout = inv.StandardOutputContent?.trim() ?? "";
+        console.warn("getStatusQuery: command ended with status", inv.Status, { stderr, stdout });
+        const stderrLines = stderr.split("\n").filter((l) => l.trim());
+        // SSM appends its own "failed to run commands: exit status N" as the
+        // last line — the real error is usually right above it.
+        const meaningful = stderrLines.filter(
+          (l) => !l.startsWith("failed to run commands:")
+        );
+        const detail = meaningful.length > 0
+          ? meaningful.slice(-3).join(" | ")
+          : stderrLines.pop() ?? `SSM command ${inv.Status.toLowerCase()}`;
+        return failed(detail);
       }
     } catch (err) {
-      console.warn("getSsmMetrics: GetCommandInvocation failed", err);
+      console.warn("getStatusQuery: GetCommandInvocation failed", err);
       return failed((err as Error).message);
     }
   }
 
-  console.warn("getSsmMetrics: timed out waiting for command result");
+  console.warn("getStatusQuery: timed out waiting for command result");
   return failed("timed out waiting for SSM result");
+}
+
+function parseScalarFromQuery(
+  data: { used_gb?: number; total_gb?: number; error?: string } | undefined
+): ScalarMetric {
+  if (!data || data.error) return { error: data?.error ?? "missing" };
+  if (data.used_gb === undefined) return { error: "could not parse metric" };
+  return { value: data.used_gb, ...(data.total_gb !== undefined && { max: data.total_gb }) };
+}
+
+function parseRconFromQuery(
+  data: { online?: number; max?: number; players?: string[]; error?: string } | undefined
+): RconStatus {
+  if (!data || data.error) return { error: data?.error ?? "missing" };
+  return {
+    online: data.online ?? 0,
+    max: data.max ?? 0,
+    players: data.players ?? [],
+  };
+}
+
+function parseLogsFromQuery(
+  data: { lines?: string[]; error?: string } | undefined
+): LogSnippet {
+  if (!data || data.error) return { error: data?.error ?? "missing" };
+  return { lines: data.lines ?? [] };
 }
 
 async function isInstanceInitializing(instanceId: string): Promise<boolean> {
@@ -356,18 +376,26 @@ async function isInstanceInitializing(instanceId: string): Promise<boolean> {
   }
 }
 
-async function getStats(instanceId: string): Promise<ServerStats> {
+async function getStats(instanceId: string, mcReady: boolean): Promise<ServerStats> {
   const now = new Date();
   const startTime = new Date(now.getTime() - 60 * 60 * 1000);
 
-  const [cpu, networkIn, networkOut, { ram, disk }] = await Promise.all([
+  const [cpu, networkIn, networkOut, statusQuery] = await Promise.all([
     getCwMetric(instanceId, "CPUUtilization", "Average", now, startTime),
     getCwMetric(instanceId, "NetworkIn", "Sum", now, startTime),
     getCwMetric(instanceId, "NetworkOut", "Sum", now, startTime),
-    getSsmMetrics(instanceId),
+    getStatusQuery(instanceId),
   ]);
 
-  return { cpu, networkIn, networkOut, ram, disk };
+  return {
+    cpu,
+    networkIn,
+    networkOut,
+    ram: statusQuery.ram,
+    disk: statusQuery.disk,
+    ...(mcReady && { rcon: statusQuery.rcon }),
+    logs: statusQuery.logs,
+  };
 }
 
 async function getStatus(): Promise<StatusResult> {
@@ -418,7 +446,7 @@ async function getStatus(): Promise<StatusResult> {
       };
     }
     console.log("getStatus: fetching server stats", { instanceId });
-    const stats = await getStats(instanceId);
+    const stats = await getStats(instanceId, mcStatus === "ready");
     return {
       status: "found",
       instanceId,
