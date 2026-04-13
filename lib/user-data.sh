@@ -3,10 +3,8 @@ set -euo pipefail
 
 echo "=== Minecraft one-time setup started at $(date) ==="
 
-# ── 1. Install system packages ───────────────────────────────────
 dnf install -y jq nvme-cli
 
-# ── 2. Create minecraft user ─────────────────────────────────────
 MC_USER="minecraft"
 MC_HOME="/opt/minecraft"
 
@@ -14,13 +12,10 @@ if ! id "${MC_USER}" &>/dev/null; then
   useradd -r -m -d "${MC_HOME}" -s /bin/bash "${MC_USER}"
 fi
 
-# ── 3. Install per-boot script ───────────────────────────────────
 mkdir -p /var/lib/cloud/scripts/per-boot
-# Per-boot script content, base64-encoded by CDK at deploy time.
-echo "${PER_BOOT_SCRIPT_B64}" | base64 -d > /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
-chmod +x /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
+# __PER_BOOT_HEREDOC__
+# __MONITOR_HEREDOC__
 
-# ── 4. Create systemd service ────────────────────────────────────
 cat > /etc/systemd/system/minecraft.service <<'UNIT'
 [Unit]
 Description=Minecraft Server
@@ -40,9 +35,27 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
 
-systemctl daemon-reload
+cat > /etc/systemd/system/minecraft-monitor.service <<'UNIT'
+[Unit]
+Description=Minecraft idle shutdown monitor
+After=minecraft.service
 
-# ── 5. Run per-boot script (first boot) ──────────────────────────
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/minecraft/monitor.sh
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable minecraft-monitor.service
+
 /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 
 echo "=== Minecraft one-time setup completed at $(date) ==="

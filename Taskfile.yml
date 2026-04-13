@@ -51,9 +51,10 @@ tasks:
   # ── Deploy ────────────────────────────────────────────────────────────────
 
   deploy:
-    desc: "Full deploy: bucket stack → upload mods/config → server stack → status"
+    desc: "Full deploy: bucket → upload mods/config → install server → server stack → status"
     cmds:
       - task: deploy-bucket
+      - task: upload-server
       - task: upload-mods
       - task: deploy-instance
       - task: deploy-api
@@ -84,23 +85,42 @@ tasks:
       # clear the Taskfile cache
       - rm -f .task/checksum/upload-mods
 
-  # ── Mods / Config ─────────────────────────────────────────────────────────
+  # ── Server / Mods / Config ───────────────────────────────────────────────
+
+  upload-server:
+    desc: Download Minecraft server JAR and upload server files to S3
+    vars:
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    cmds:
+      - bash scripts/upload-server.sh {{.BUCKET_NAME}}
 
   upload-mods:
-    desc: Upload server config and sync mods to S3
+    desc: Upload mods and mod configs to S3
     vars:
       BUCKET_NAME:
         sh: bash scripts/get-bucket-name.sh
     sources:
       - scripts/upload-mods.sh
-      - ./mods/*.jar
-      - ./server-config/**/*
-      - ./mods-config/**/*
+      - ./resources/mods/*.jar
+      - ./resources/mods-config/**/*
     cmds:
       - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
 
+  sync-server:
+    desc: Upload server config to S3, sync to running instance, and restart
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    cmds:
+      - bash scripts/upload-server-config.sh {{.BUCKET_NAME}}
+      - bash scripts/sync-server.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+      - bash scripts/restart-server.sh {{.INSTANCE_ID}}
+
   sync-mods:
-    desc: Upload mods to S3, sync to running EC2 instance, and restart the server (no SSH needed)
+    desc: Upload mods to S3, sync to running instance, and restart
     vars:
       INSTANCE_ID:
         sh: bash scripts/get-instance-id.sh
@@ -109,6 +129,21 @@ tasks:
     cmds:
       - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
       - bash scripts/sync-mods.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+      - bash scripts/restart-server.sh {{.INSTANCE_ID}}
+
+  sync-all:
+    desc: Upload server config, mods, and mod configs to S3, sync to running instance, and restart
+    vars:
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+      BUCKET_NAME:
+        sh: bash scripts/get-bucket-name.sh
+    cmds:
+      - bash scripts/upload-server-config.sh {{.BUCKET_NAME}}
+      - bash scripts/sync-server.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+      - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
+      - bash scripts/sync-mods.sh {{.INSTANCE_ID}} {{.BUCKET_NAME}}
+      - bash scripts/restart-server.sh {{.INSTANCE_ID}}
 
   # ── Instance lifecycle ────────────────────────────────────────────────────
 

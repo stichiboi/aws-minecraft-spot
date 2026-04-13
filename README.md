@@ -32,27 +32,39 @@ Run `task` to list all available tasks.
 | `task start-server` | Start a stopped instance (per-boot logic runs on boot) |
 | `task stop-server` | Stop the instance; **data EBS stays attached until next start** |
 | `task ssm` | runs an SSM command on the EC2 instance |
-| `task upload-mods` | Sync local `mods/*.jar` and `server-config/` to S3 |
+| `task upload-mods` | Sync local `resources/` (mods, config, server settings) to S3 |
 | `task deploy` | Full deploy: bucket → upload → server → status |
 | `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
 
-## Adding Mods
+## The `resources/` directory
 
-1. Put `.jar` files in `mods/` (directory is gitignored).
-2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server (no SSH needed).
+All server-specific files live under `resources/` at the project root. The entire directory is **gitignored** and every subdirectory is **optional** — scripts skip missing folders gracefully.
 
-Or to apply on next boot only (e.g. the server is offlilne): `task upload-mods`.
-
-## Mod Configuration
-
-Put mod config files (`.toml`, `.json`, `.cfg`, etc.) in `mods-config/` at the project root. These are synced to `s3://BUCKET/mods-config/` and land at `/opt/minecraft/data/server/config/` on the instance — the standard mod config directory, sibling to `mods/`.
-
-```bash
-task sync-mods    # uploads mods-config/ to S3, pushes to the running instance, and restarts the minecraft server
-task upload-mods  # uploads only (apply on next boot)
+```
+resources/
+  mods/                 # Minecraft mod JARs (.jar)
+  mods-config/          # Mod config files (.toml, .json, .cfg, etc.)
+  server/               # jvm-args.txt, server.properties
 ```
 
-The sync uses `--delete`, so S3 (and therefore the instance) always mirrors your local `mods-config/` folder exactly. If the folder doesn't exist locally, the upload step is skipped silently.
+Create whatever subdirectories you need:
+
+```bash
+mkdir -p resources/mods resources/mods-config resources/server
+```
+
+## Adding Mods
+
+1. Put `.jar` files in `resources/mods/`.
+2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server (no SSH needed).
+
+Or to apply on next boot only (e.g. the server is offline): `task upload-mods`.
+
+### Mod Configuration
+
+Put mod config files (`.toml`, `.json`, `.cfg`, etc.) in `resources/mods-config/`. These are synced to `s3://BUCKET/mods-config/` and land at `/opt/minecraft/data/server/config/` on the instance — the standard mod config directory, sibling to `mods/`.
+
+The sync uses `--delete`, so S3 (and therefore the instance) always mirrors your local `resources/mods-config/` folder exactly. If the folder doesn't exist locally, the upload step is skipped silently.
 
 ## Customizing the Server
 
@@ -64,12 +76,25 @@ Edit `server-config/config.json`:
 {
   "type": "neoforge",     // "vanilla", "forge", "neoforge", or "fabric"
   "mcVersion": "1.21.1",
-  "loaderVersion": "21.1.222",  // omit or leave empty for vanilla/fabric without a specific loader version
-  "javaVersion": "21"           // major version, e.g. "17" or "21"
+  "loaderVersion": "21.1.222"  // omit or leave empty for vanilla/fabric without a specific loader version
 }
 ```
 
-Then run `task upload-mods` and restart the instance (`task stop-server` + `task start-server`). The per-boot script reinstalls the server only when the type/version/loader combo changes (tracked via a `.installed_*` marker on the data volume). Java is installed on every boot via `dnf` (idempotent — fast if already present).
+Then run `task upload-server` to download and upload the new server binary to S3, and restart the instance (`task stop-server` + `task start-server`).
+
+### Java version
+
+Set `javaVersion` in `cdk.json` context (default `"21"`):
+
+```json
+{
+  "context": {
+    "javaVersion": "21"
+  }
+}
+```
+
+This is pushed to SSM Parameter Store on deploy. The per-boot script reads it from SSM and installs the matching Amazon Corretto version. To change Java version, edit `cdk.json` and run `task deploy-instance`.
 
 ### Instance type
 
@@ -95,7 +120,7 @@ Run `task deploy-instance` afterwards if you also want the launch template updat
 
 ### JVM memory and GC settings
 
-Edit `server-config/jvm-args.txt` — one flag per line:
+Edit `resources/server/jvm-args.txt` — one flag per line:
 
 ```
 -Xms1G
@@ -147,7 +172,7 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 - **EC2 Spot** (`r5.large` default) with **stop** interruption - instance stops, not terminated; EBS data volume is reattached on next boot.
 - **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. Replacing or resizing the instance in CDK does **not** create a new data volume; the same volume is attached each boot.
 - **Small root volume** (8GB gp3) on the instance for the OS only.
-- **S3** - `config/`, `mods/`, and future `backups/`; `upload-mods.sh` pushes local `server-config/` and `mods/` into the bucket.
+- **S3** - `server/`, `mods/`, `mods-config/`, `server-bin/`, `tools/`; `upload-mods.sh` pushes local `resources/` into the bucket.
 - **Route53** - A record updated on **every boot** by the per-boot script (no Elastic IP).
 - **Lambda + API Gateway** - start/stop/status logic lives in `lib/lambda/server-management.ts`; bots call this instead of AWS APIs directly. The Discord handler and worker Lambdas are deployed alongside it.
 - **IMDSv2** - instance scripts use the metadata token API for instance id, public IP, and region.
@@ -159,7 +184,7 @@ Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** beh
 | File | When it runs | Role |
 |---|---|---|
 | `lib/user-data.sh` | First boot only (cloud-init) | Installs jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
-| `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 config/mods, installs Java and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
+| `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 server config/mods, installs Java (version from SSM) and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
 
 At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}`, etc., and embeds the per-boot script (base64) into user-data.
 

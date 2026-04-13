@@ -17,6 +17,10 @@ export interface MinecraftStackProps extends cdk.StackProps {
   minecraftPort: number;
   hostedZoneName: string;
   serverSubdomain: string;
+  /** Seconds of player inactivity before the server auto-shuts down. Default: 900 (15 min). */
+  idleShutdownTimer: number;
+  /** Java major version for Amazon Corretto on the instance. Default: "21". */
+  javaVersion: string;
 }
 
 export class MinecraftStack extends cdk.Stack {
@@ -145,11 +149,13 @@ export class MinecraftStack extends cdk.Stack {
     // and eliminates the Fn::Sub escaping that was required previously.
     const configPath = "/minecraft/config";
     const configEntries: [string, string][] = [
-      ["bucket-name",    bucket.bucketName],
-      ["volume-id",      dataVolume.volumeId],
-      ["hosted-zone-id", hostedZone.hostedZoneId],
-      ["fqdn",           fqdn],
-      ["port",           String(props.minecraftPort)],
+      ["bucket-name",     bucket.bucketName],
+      ["volume-id",       dataVolume.volumeId],
+      ["hosted-zone-id",  hostedZone.hostedZoneId],
+      ["fqdn",            fqdn],
+      ["port",            String(props.minecraftPort)],
+      ["shutdown-timer",  String(props.idleShutdownTimer)],
+      ["java-version",    props.javaVersion],
     ];
     for (const [name, value] of configEntries) {
       new ssm.StringParameter(this, `Param-${name}`, {
@@ -164,6 +170,17 @@ export class MinecraftStack extends cdk.Stack {
         resources: [
           `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}`,
           `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}/*`,
+        ],
+      })
+    );
+
+    // Allow the idle-shutdown monitor to invoke the management Lambda so it
+    // can cancel the spot request and terminate the instance cleanly.
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [
+          `arn:aws:lambda:${this.region}:${this.account}:function:minecraft-server-management`,
         ],
       })
     );

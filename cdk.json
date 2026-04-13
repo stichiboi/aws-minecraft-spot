@@ -11,7 +11,7 @@
       "package*.json",
       "node_modules",
       "dist",
-      "mods",
+      "resources",
       "scripts"
     ]
   },
@@ -22,6 +22,8 @@
     "sshCidr": "0.0.0.0/0",
     "minecraftPort": 25565,
     "hostedZoneName": "broccoli-dependence.stichiboi.com",
-    "serverSubdomain": "minecraft"
+    "serverSubdomain": "minecraft",
+    "idleShutdownTimer": 900,
+    "javaVersion": "21"
   }
 }

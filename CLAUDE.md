@@ -10,9 +10,15 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `lib/minecraft-bucket-stack.ts` | CDK stack: S3 bucket for mods |
 | `lib/user-data.sh` | EC2 init script (runs once on first boot) |
 | `lib/per-boot.sh` | EC2 boot script (runs on every start) |
-| `lib/build-user-data.ts` | Bundles user-data.sh into CDK asset |
-| `scripts/upload-mods.sh` | Sync local mods/ + server-config/ to S3 |
-| `scripts/sync-mods.sh` | Push S3 mods to running instance via SSM |
+| `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, shuts down after inactivity |
+| `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
+| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor.sh into CDK asset via heredocs |
+| `scripts/upload-server.sh` | Download MC server JAR + upload server files (JAR, config, rcon) to S3 |
+| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, rcon_query.py to S3 |
+| `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |
+| `scripts/sync-server.sh` | Sync server files from S3 to running instance via SSM (no restart) |
+| `scripts/sync-mods.sh` | Sync mods + mod configs from S3 to running instance via SSM (no restart) |
+| `scripts/restart-server.sh` | Restart minecraft.service on instance via SSM (shared by sync tasks) |
 | `scripts/start-server.sh` | Invoke `minecraft-server-management` Lambda (start) |
 | `scripts/stop-server.sh` | Invoke `minecraft-server-management` Lambda (stop) |
 | `scripts/status.sh` | Invoke `minecraft-server-management` Lambda (status) + show bucket |
@@ -20,9 +26,10 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `scripts/reset-world.sh` | Delete world folders on running instance via SSM and restart |
 | `server-paths.txt` | Gitignored: extra server paths for world reset and backup (relative to server dir) |
 | `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks |
-| `server-config/` | server.properties, config.json, jvm-args.txt |
-| `mods/` | Minecraft mod JARs (uploaded to S3) |
-| `mods-config/` | Mod config files synced to S3 and deployed to server/config/ on the instance |
+| `server-config/config.json` | Server type, MC version, loader version — used locally by upload-server.sh |
+| `resources/mods/` | Gitignored: Minecraft mod JARs (uploaded to S3) |
+| `resources/mods-config/` | Gitignored: mod config files synced to S3 and deployed to server/config/ on the instance |
+| `resources/server/` | Gitignored: jvm-args.txt, server.properties (uploaded to S3 `server/` prefix) |
 | `Taskfile.yml` | All runnable tasks — source of truth for workflow |
 | `lib/minecraft-api-stack.ts` | CDK stack: API Gateway + Lambda functions |
 | `lib/lambda/server-management.ts` | Lambda: EC2 start/stop/status logic — directly invocable |

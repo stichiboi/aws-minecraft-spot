@@ -37,6 +37,8 @@ const serverStack = new MinecraftStack(app, "MinecraftServer", {
   minecraftPort: Number(app.node.tryGetContext("minecraftPort")) || 25565,
   hostedZoneName: app.node.tryGetContext("hostedZoneName") || "broccoli-dependence.stichiboi.com",
   serverSubdomain: app.node.tryGetContext("serverSubdomain") || "minecraft",
+  idleShutdownTimer: Number(app.node.tryGetContext("idleShutdownTimer")) || 900,
+  javaVersion: app.node.tryGetContext("javaVersion") || "21",
 });
 
 new MinecraftApiStack(app, "MinecraftApi", {
