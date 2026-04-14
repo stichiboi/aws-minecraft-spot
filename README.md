@@ -25,16 +25,16 @@ After deploy, run `task status` to see the server address.
 
 Run `task` to list all available tasks.
 
-| Command | What it does |
-|---|---|
-| `task rcon` | Runs an `rcon` command on the minecraft server. Use this to add a player to the operator list `task rcon -- "op Stichiboi"` |
-| `task status` | Instance state, public IP, DNS name, S3 bucket |
-| `task start-server` | Start a stopped instance (per-boot logic runs on boot) |
-| `task stop-server` | Stop the instance; **data EBS stays attached until next start** |
-| `task ssm` | runs an SSM command on the EC2 instance |
-| `task upload-mods` | Sync local `resources/` (mods, config, server settings) to S3 |
-| `task deploy` | Full deploy: bucket → upload → server → status |
-| `task destroy` | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN) |
+| Command             | What it does                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `task rcon`         | Runs an `rcon` command on the minecraft server. Use this to add a player to the operator list `task rcon -- "op Stichiboi"` |
+| `task status`       | Instance state, public IP, DNS name, S3 bucket                                                                              |
+| `task start-server` | Start a stopped instance (per-boot logic runs on boot)                                                                      |
+| `task stop-server`  | Stop the instance; **data EBS stays attached until next start**                                                             |
+| `task ssm`          | runs an SSM command on the EC2 instance                                                                                     |
+| `task upload-mods`  | Sync local `resources/` (mods, config, server settings) to S3                                                               |
+| `task deploy`       | Full deploy: bucket → upload → server → status                                                                              |
+| `task destroy`      | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN)                                       |
 
 ## The `resources/` directory
 
@@ -74,9 +74,9 @@ Edit `server-config/config.json`:
 
 ```json
 {
-  "type": "neoforge",     // "vanilla", "forge", "neoforge", or "fabric"
+  "type": "neoforge", // "vanilla", "forge", "neoforge", or "fabric"
   "mcVersion": "1.21.1",
-  "loaderVersion": "21.1.222"  // omit or leave empty for vanilla/fabric without a specific loader version
+  "loaderVersion": "21.1.222" // omit or leave empty for vanilla/fabric without a specific loader version
 }
 ```
 
@@ -103,10 +103,13 @@ Edit `instanceType` in `cdk.json`:
 ```json
 {
   "context": {
+    "amazonLinuxCpuType": "x86_64",
     "instanceType": "r5.large"
   }
 }
 ```
+
+For **Graviton** types (e.g. `m7g.xlarge`), set `"amazonLinuxCpuType": "ARM_64"` so the AL2023 AMI is ARM64.
 
 `task start-server` reads this value at launch time and passes it to `run-instances`, so **no CDK deploy is needed** — just stop the server, edit `cdk.json`, and start it again:
 
@@ -131,11 +134,11 @@ Edit `resources/server/jvm-args.txt` — one flag per line:
 
 **`-Xms`** is the initial heap size (allocated immediately on start). **`-Xmx`** is the maximum. A good rule of thumb: leave at least 1–1.5GB free for the OS and JVM non-heap overhead.
 
-| Instance   | RAM   | Recommended `-Xmx` |
-|------------|-------|---------------------|
-| t3.medium  | 4 GB  | `2500M`             |
-| r5.large   | 16 GB | `12G`               |
-| r5.xlarge  | 32 GB | `26G`               |
+| Instance  | RAM   | Recommended `-Xmx` |
+| --------- | ----- | ------------------ |
+| t3.medium | 4 GB  | `2500M`            |
+| r5.large  | 16 GB | `12G`              |
+| r5.xlarge | 32 GB | `26G`              |
 
 To apply changes to a running instance: `task sync-mods` (uploads to S3 and pushes to the instance via SSM, no SSH or reboot needed).
 
@@ -181,10 +184,10 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 
 Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** behavior is shell:
 
-| File | When it runs | Role |
-|---|---|---|
-| `lib/user-data.sh` | First boot only (cloud-init) | Installs jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once. |
-| `lib/per-boot.sh` | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 server config/mods, installs Java (version from SSM) and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
+| File               | When it runs                                    | Role                                                                                                                                                                                                                                      |
+| ------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/user-data.sh` | First boot only (cloud-init)                    | Installs jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once.                                                                                                              |
+| `lib/per-boot.sh`  | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 server config/mods, installs Java (version from SSM) and server if needed, writes `start.sh`, `systemctl restart minecraft`. |
 
 At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}`, etc., and embeds the per-boot script (base64) into user-data.
 
@@ -194,6 +197,7 @@ At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}
 - Few hours/day: ~$8–14/month
 
 ## Next steps
+
 - [ ] Backup world data on shutdown / on a schedule — store in S3 cold storage. A combination of [HBackup](https://www.curseforge.com/minecraft/mc-mods/hbackup) and S3 sync would be ideal.
 - [x] Lambda commands to start the server
 - [ ] Automatic server shutdown when no players are online

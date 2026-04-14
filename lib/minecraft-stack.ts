@@ -21,6 +21,8 @@ export interface MinecraftStackProps extends cdk.StackProps {
   idleShutdownTimer: number;
   /** Java major version for Amazon Corretto on the instance. Default: "21". */
   javaVersion: string;
+  /** Amazon Linux 2023 AMI CPU. Must match `instanceType` (e.g. ARM_64 for m7g / Graviton). Default: X86_64. */
+  amazonLinuxCpuType: ec2.AmazonLinuxCpuType;
 }
 
 export class MinecraftStack extends cdk.Stack {
@@ -195,7 +197,9 @@ export class MinecraftStack extends cdk.Stack {
     // spot relaunches) always receive the Name tag, independent of CloudFormation.
     const launchTemplate = new ec2.LaunchTemplate(this, "LaunchTemplate", {
       instanceType: new ec2.InstanceType(props.instanceType),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
+      machineImage: ec2.MachineImage.latestAmazonLinux2023({
+        cpuType: props.amazonLinuxCpuType,
+      }),
       role,
       userData,
       securityGroup: sg,

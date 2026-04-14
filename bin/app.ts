@@ -2,6 +2,7 @@
 import "source-map-support/register";
 import * as dotenv from "dotenv";
 import * as cdk from "aws-cdk-lib";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import { MinecraftBucketStack } from "../lib/minecraft-bucket-stack";
 import { MinecraftStack } from "../lib/minecraft-stack";
 import { MinecraftApiStack } from "../lib/minecraft-api-stack";
@@ -19,6 +20,14 @@ const env: cdk.Environment = {
     process.env.CDK_DEFAULT_REGION ||
     "eu-central-1",
 };
+
+function amazonLinuxCpuTypeFromContext(app: cdk.App): ec2.AmazonLinuxCpuType {
+  const raw = app.node.tryGetContext("amazonLinuxCpuType");
+  if (raw === "ARM_64") {
+    return ec2.AmazonLinuxCpuType.ARM_64;
+  }
+  return ec2.AmazonLinuxCpuType.X86_64;
+}
 
 const bucketStack = new MinecraftBucketStack(app, "MinecraftBucket", {
   env,
@@ -39,6 +48,7 @@ const serverStack = new MinecraftStack(app, "MinecraftServer", {
   serverSubdomain: app.node.tryGetContext("serverSubdomain") || "minecraft",
   idleShutdownTimer: Number(app.node.tryGetContext("idleShutdownTimer")) || 900,
   javaVersion: app.node.tryGetContext("javaVersion") || "21",
+  amazonLinuxCpuType: amazonLinuxCpuTypeFromContext(app),
 });
 
 new MinecraftApiStack(app, "MinecraftApi", {
