@@ -93,7 +93,8 @@ if ! mountpoint -q "${MC_DATA}"; then
   echo "Mounted ${REAL_DEVICE} at ${MC_DATA}"
 fi
 
-mkdir -p "${SERVER_DIR}" "${MODS_DIR}" "${SERVER_DIR}/config"
+mkdir -p "${SERVER_DIR}" "${MODS_DIR}" "${SERVER_DIR}/config" \
+  "${SERVER_DIR}/simplebackups/world"
 
 echo "Updating DNS: ${FQDN} -> ${PUBLIC_IP}"
 aws route53 change-resource-record-sets \
@@ -129,6 +130,9 @@ aws s3 cp "s3://${BUCKET_NAME}/tools/rcon_query.py" /opt/minecraft/rcon_query.py
 aws s3 cp "s3://${BUCKET_NAME}/tools/status_query.py" /opt/minecraft/status_query.py
 chmod +x /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py
 
+aws s3 cp "s3://${BUCKET_NAME}/tools/simplebackups-s3-watcher.sh" /opt/minecraft/simplebackups-s3-watcher.sh
+chmod 755 /opt/minecraft/simplebackups-s3-watcher.sh
+
 echo "eula=true" > "${SERVER_DIR}/eula.txt"
 
 if [[ ! -f "${SERVER_DIR}/server.properties" ]]; then
@@ -156,9 +160,33 @@ exec ${LAUNCH_CMD}
 STARTSCRIPT
 chmod +x "${SERVER_DIR}/start.sh"
 
+mkdir -p /etc/minecraft
+cat > /etc/minecraft/instance.env <<ENV
+INSTANCE_ID=${INSTANCE_ID}
+PUBLIC_IP=${PUBLIC_IP}
+REGION=${REGION}
+AWS_DEFAULT_REGION=${REGION}
+BUCKET_NAME=${BUCKET_NAME}
+VOLUME_ID=${VOLUME_ID}
+HOSTED_ZONE_ID=${HOSTED_ZONE_ID}
+FQDN=${FQDN}
+MINECRAFT_PORT=${MINECRAFT_PORT}
+JAVA_VERSION=${JAVA_VERSION}
+MC_DATA=${MC_DATA}
+SERVER_DIR=${SERVER_DIR}
+MODS_DIR=${MODS_DIR}
+WATCH_DIR=${SERVER_DIR}/simplebackups/world
+MC_USER=${MC_USER}
+ENV
+chmod 644 /etc/minecraft/instance.env
+
 chown -R "${MC_USER}:${MC_USER}" "${MC_DATA}"
 
 systemctl restart minecraft.service
 systemctl restart minecraft-monitor.service
+if systemctl cat simplebackups-s3-watcher.service &>/dev/null; then
+  systemctl enable simplebackups-s3-watcher.service 2>/dev/null || true
+  systemctl restart simplebackups-s3-watcher.service
+fi
 
 echo "=== Minecraft per-boot script completed at $(date) ==="

@@ -6,16 +6,20 @@ import { buildUserDataBundle } from "./build-user-data";
 const LIB_DIR = __dirname;
 
 describe("buildUserDataBundle", () => {
-  it("embeds per-boot.sh as base64 and decoding round-trips correctly", () => {
+  it("embeds per-boot.sh verbatim in the per-boot heredoc", () => {
     const { userDataScript } = buildUserDataBundle({ templatesDir: LIB_DIR });
     const perBootRaw = fs.readFileSync(
       path.join(LIB_DIR, "per-boot.sh"),
       "utf-8"
     );
-
-    const m = userDataScript.match(/echo "([A-Za-z0-9+/=]+)" \| base64 -d >/);
-    expect(m).not.toBeNull();
-    expect(Buffer.from(m![1], "base64").toString("utf-8")).toBe(perBootRaw);
+    const marker = "cat > /var/lib/cloud/scripts/per-boot/minecraft-boot.sh <<'PERBOOTEOF'";
+    const i = userDataScript.indexOf(marker);
+    expect(i).toBeGreaterThanOrEqual(0);
+    const j = userDataScript.indexOf("PERBOOTEOF", i + marker.length);
+    const inner = userDataScript
+      .slice(i + marker.length, j)
+      .replace(/^\n/, "");
+    expect(inner.trimEnd()).toBe(perBootRaw.trimEnd());
   });
 
   it("replaces the PER_BOOT_SCRIPT_B64 placeholder", () => {

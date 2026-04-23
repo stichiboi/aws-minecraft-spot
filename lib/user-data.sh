@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "=== Minecraft one-time setup started at $(date) ==="
 
-dnf install -y jq nvme-cli
+dnf install -y jq nvme-cli inotify-tools
 
 MC_USER="minecraft"
 MC_HOME="/opt/minecraft"
@@ -12,7 +12,7 @@ if ! id "${MC_USER}" &>/dev/null; then
   useradd -r -m -d "${MC_HOME}" -s /bin/bash "${MC_USER}"
 fi
 
-mkdir -p /var/lib/cloud/scripts/per-boot
+mkdir -p /var/lib/cloud/scripts/per-boot /etc/minecraft
 # __PER_BOOT_HEREDOC__
 # __MONITOR_HEREDOC__
 
@@ -53,8 +53,27 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
 
+cat > /etc/systemd/system/simplebackups-s3-watcher.service <<'UNIT'
+[Unit]
+Description=Upload SimpleBackups zips to S3
+After=network-online.target
+ConditionPathIsMountPoint=/opt/minecraft/data
+
+[Service]
+Type=simple
+User=minecraft
+EnvironmentFile=-/etc/minecraft/instance.env
+ExecStart=/opt/minecraft/simplebackups-s3-watcher.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 systemctl daemon-reload
 systemctl enable minecraft-monitor.service
+systemctl enable simplebackups-s3-watcher.service
 
 /var/lib/cloud/scripts/per-boot/minecraft-boot.sh
 

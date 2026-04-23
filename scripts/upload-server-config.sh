@@ -29,6 +29,7 @@ echo ""
 echo "▸ Uploading tools to s3://${BUCKET_NAME}/tools/..."
 aws s3 cp "${PROJECT_DIR}/lib/rcon_query.py" "s3://${BUCKET_NAME}/tools/rcon_query.py"
 aws s3 cp "${PROJECT_DIR}/lib/status_query.py" "s3://${BUCKET_NAME}/tools/status_query.py"
+aws s3 cp "${PROJECT_DIR}/lib/simplebackups-s3-watcher.sh" "s3://${BUCKET_NAME}/tools/simplebackups-s3-watcher.sh"
 
 echo ""
 echo "✓ Server config upload complete."

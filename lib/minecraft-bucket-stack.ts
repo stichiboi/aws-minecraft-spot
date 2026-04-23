@@ -15,9 +15,15 @@ export class MinecraftBucketStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       lifecycleRules: [
         {
-          id: "CleanupOldBackups",
-          prefix: "backups/",
-          expiration: cdk.Duration.days(30),
+          id: "BackupWorldS3Gir",
+          prefix: "backups/world/",
+          expiration: cdk.Duration.days(90),
+          transitions: [
+            {
+              storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL,
+              transitionAfter: cdk.Duration.days(3),
+            },
+          ],
         },
       ],
     });
