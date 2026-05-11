@@ -94,6 +94,7 @@ if ! mountpoint -q "${MC_DATA}"; then
 fi
 
 mkdir -p "${SERVER_DIR}" "${MODS_DIR}" "${SERVER_DIR}/config" \
+  "${SERVER_DIR}/world/datapacks" \
   "${SERVER_DIR}/simplebackups/world"
 
 echo "Updating DNS: ${FQDN} -> ${PUBLIC_IP}"
@@ -126,6 +127,7 @@ aws s3 sync "s3://${BUCKET_NAME}/server-bin/" "${SERVER_DIR}/" \
 
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
 aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete
+aws s3 sync "s3://${BUCKET_NAME}/datapacks/" "${SERVER_DIR}/world/datapacks/" --delete
 aws s3 cp "s3://${BUCKET_NAME}/tools/rcon_query.py" /opt/minecraft/rcon_query.py
 aws s3 cp "s3://${BUCKET_NAME}/tools/status_query.py" /opt/minecraft/status_query.py
 chmod +x /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py

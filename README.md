@@ -44,13 +44,14 @@ All server-specific files live under `resources/` at the project root. The entir
 resources/
   mods/                 # Minecraft mod JARs (.jar)
   mods-config/          # Mod config files (.toml, .json, .cfg, etc.)
+  datapacks/            # Minecraft data packs (.zip)
   server/               # jvm-args.txt, server.properties
 ```
 
 Create whatever subdirectories you need:
 
 ```bash
-mkdir -p resources/mods resources/mods-config resources/server
+mkdir -p resources/mods resources/mods-config resources/datapacks resources/server
 ```
 
 ## Adding Mods
@@ -65,6 +66,15 @@ Or to apply on next boot only (e.g. the server is offline): `task upload-mods`.
 Put mod config files (`.toml`, `.json`, `.cfg`, etc.) in `resources/mods-config/`. These are synced to `s3://BUCKET/mods-config/` and land at `/opt/minecraft/data/server/config/` on the instance — the standard mod config directory, sibling to `mods/`.
 
 The sync uses `--delete`, so S3 (and therefore the instance) always mirrors your local `resources/mods-config/` folder exactly. If the folder doesn't exist locally, the upload step is skipped silently.
+
+## Adding Data Packs
+
+1. Put `.zip` files in `resources/datapacks/`.
+2. `task sync-mods` — uploads to S3 and syncs to the running instance via SSM, then restarts the server.
+
+Or to apply on next boot only: `task upload-mods`.
+
+Data packs are synced to `s3://BUCKET/datapacks/` and land at `/opt/minecraft/data/server/world/datapacks/` on the instance — the standard Minecraft data pack directory inside the world folder. The sync uses `--delete`, so S3 always mirrors your local `resources/datapacks/` exactly.
 
 ## Customizing the Server
 

@@ -16,8 +16,10 @@ COMMAND_ID=$(aws ssm send-command \
   --parameters commands="[
     \"aws s3 sync s3://${BUCKET_NAME}/mods/ /opt/minecraft/data/server/mods/ --delete\",
     \"aws s3 sync s3://${BUCKET_NAME}/mods-config/ /opt/minecraft/data/server/config/ --delete\",
+    \"aws s3 sync s3://${BUCKET_NAME}/datapacks/ /opt/minecraft/data/server/world/datapacks/ --delete\",
     \"chown -R minecraft:minecraft /opt/minecraft/data/server/mods /opt/minecraft/data/server/config\",
-    \"echo 'Mods synced.'\"
+    \"chown -R minecraft:minecraft /opt/minecraft/data/server/world/datapacks\",
+    \"echo 'Mods and datapacks synced.'\"
   ]" \
   --query 'Command.CommandId' \
   --output text)

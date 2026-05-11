@@ -32,5 +32,20 @@ else
   aws s3 sync "${MODS_CONFIG_DIR}/" "s3://${BUCKET_NAME}/mods-config/" --delete
 fi
 
+# ── Datapacks ─────────────────────────────────────────────────────────────
+echo ""
+DATAPACKS_DIR="${RESOURCES_DIR}/datapacks"
+if [[ ! -d "${DATAPACKS_DIR}" ]]; then
+  echo "▸ No resources/datapacks/ folder found — skipping datapack sync."
+else
+  DP_COUNT=$(find "${DATAPACKS_DIR}" -maxdepth 1 -name "*.zip" 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "${DP_COUNT}" -eq 0 ]]; then
+    echo "▸ No .zip files found in resources/datapacks/ — skipping datapack sync."
+  else
+    echo "▸ Syncing ${DP_COUNT} datapack(s) to s3://${BUCKET_NAME}/datapacks/..."
+    aws s3 sync "${DATAPACKS_DIR}" "s3://${BUCKET_NAME}/datapacks/" --delete --exclude "*" --include "*.zip"
+  fi
+fi
+
 echo ""
 echo "✓ Mods upload complete."

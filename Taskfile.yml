@@ -104,6 +104,7 @@ tasks:
       - scripts/upload-mods.sh
       - ./resources/mods/*.jar
       - ./resources/mods-config/**/*
+      - ./resources/datapacks/*.zip
     cmds:
       - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
 
