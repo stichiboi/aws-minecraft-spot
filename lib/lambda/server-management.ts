@@ -4,7 +4,7 @@ import {
   DescribeInstancesCommand,
   DescribeInstanceStatusCommand,
   DescribeVolumesCommand,
-  RunInstancesCommand,
+  CreateFleetCommand,
   TerminateInstancesCommand,
   CancelSpotInstanceRequestsCommand,
   DescribeSubnetsCommand,
@@ -43,7 +43,9 @@ const LAUNCH_TEMPLATE_NAME =
   process.env.LAUNCH_TEMPLATE_NAME ?? "MinecraftServer";
 const MINECRAFT_PORT = Number(process.env.MINECRAFT_PORT ?? "25565");
 const SERVER_FQDN = process.env.SERVER_FQDN ?? "";
-const INSTANCE_TYPE = process.env.INSTANCE_TYPE ?? "r3.large";
+const INSTANCE_TYPES: string[] = JSON.parse(
+  process.env.INSTANCE_TYPES ?? '["r3.large"]'
+);
 const DATA_VOLUME_TAG = process.env.DATA_VOLUME_TAG ?? "MinecraftData";
 
 const STATE_PRIORITY: Record<string, number> = {
@@ -145,37 +147,69 @@ async function startServer(): Promise<StartResult> {
     })
   );
 
-  const subnetId = subnets.Subnets?.[0]?.SubnetId;
+  const subnet = subnets.Subnets?.[0];
+  const subnetId = subnet?.SubnetId;
   if (!subnetId) {
     throw new Error(`Could not find subnet tagged Name=${SUBNET_FILTER}`);
   }
-  console.log("startServer: found subnet", { subnetId });
+  console.log("startServer: found subnet", { subnetId, az: subnet.AvailabilityZone });
 
-  console.log("startServer: launching instance", {
+  console.log("startServer: creating fleet", {
     launchTemplate: LAUNCH_TEMPLATE_NAME,
-    instanceType: INSTANCE_TYPE,
+    instanceTypes: INSTANCE_TYPES,
     subnetId,
   });
-  const run = await ec2.send(
-    new RunInstancesCommand({
-      MinCount: 1,
-      MaxCount: 1,
-      LaunchTemplate: {
-        LaunchTemplateName: LAUNCH_TEMPLATE_NAME,
-        Version: "$Latest",
+  const fleet = await ec2.send(
+    new CreateFleetCommand({
+      Type: "instant",
+      TargetCapacitySpecification: {
+        TotalTargetCapacity: 1,
+        DefaultTargetCapacityType: "spot",
       },
-      InstanceType: INSTANCE_TYPE as never,
-      SubnetId: subnetId,
+      SpotOptions: {
+        AllocationStrategy: "capacity-optimized",
+      },
+      LaunchTemplateConfigs: [
+        {
+          LaunchTemplateSpecification: {
+            LaunchTemplateName: LAUNCH_TEMPLATE_NAME,
+            Version: "$Latest",
+          },
+          Overrides: INSTANCE_TYPES.map((type) => ({
+            InstanceType: type as never,
+            SubnetId: subnetId,
+          })),
+        },
+      ],
     })
   );
 
-  const instanceId = run.Instances?.[0]?.InstanceId ?? "unknown";
-  const instanceType = run.Instances?.[0]?.InstanceType ?? INSTANCE_TYPE;
-  console.log("startServer: instance launched", { instanceId, instanceType });
+  const launched = fleet.Instances?.[0]?.InstanceIds?.[0];
+  const launchedType = fleet.Instances?.[0]?.InstanceType;
+  if (!launched) {
+    const perTypeErrors = fleet.Errors?.map((e) => {
+      const type = e.LaunchTemplateAndOverrides?.Overrides?.InstanceType ?? "unknown";
+      return `${type}: ${e.ErrorCode}`;
+    });
+    console.error("startServer: fleet failed to launch", {
+      az: subnet.AvailabilityZone,
+      perTypeErrors,
+    });
+    return {
+      status: "no_capacity",
+      types: INSTANCE_TYPES,
+      az: subnet.AvailabilityZone ?? "unknown",
+    };
+  }
+
+  console.log("startServer: instance launched via fleet", {
+    instanceId: launched,
+    instanceType: launchedType,
+  });
   return {
     status: "started",
-    instanceId,
-    instanceType,
+    instanceId: launched,
+    instanceType: launchedType ?? INSTANCE_TYPES[0],
     fqdn: SERVER_FQDN,
     port: MINECRAFT_PORT,
   };

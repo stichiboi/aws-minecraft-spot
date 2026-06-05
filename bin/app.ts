@@ -39,7 +39,7 @@ const serverStack = new MinecraftStack(app, "MinecraftServer", {
   description: "Modded Minecraft server - Spot EC2, S3 mods, Route53 DNS",
   bucket: bucketStack.bucket,
 
-  instanceType: app.node.tryGetContext("instanceType") || "r5.large",
+  instanceTypes: app.node.tryGetContext("instanceTypes") || ["r5.large"],
   volumeSize: Number(app.node.tryGetContext("volumeSize")) || 30,
   sshKeyName: app.node.tryGetContext("sshKeyName") || undefined,
   sshCidr: app.node.tryGetContext("sshCidr") || "0.0.0.0/0",
@@ -59,5 +59,5 @@ new MinecraftApiStack(app, "MinecraftApi", {
   discordApplicationId: process.env.DISCORD_APPLICATION_ID ?? "",
   minecraftPort: serverStack.minecraftPort,
   serverFqdn: serverStack.fqdn,
-  instanceType: app.node.tryGetContext("instanceType") || "r3.large",
+  instanceTypes: app.node.tryGetContext("instanceTypes") || ["r3.large"],
 });

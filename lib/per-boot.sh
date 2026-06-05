@@ -122,8 +122,10 @@ echo "Java version: ${JAVA_VERSION}"
 dnf install -y "java-${JAVA_VERSION}-amazon-corretto-headless"
 
 echo "Syncing server files from S3..."
+rm -rf "${SERVER_DIR}/libraries"
 aws s3 sync "s3://${BUCKET_NAME}/server-bin/" "${SERVER_DIR}/" \
   --exclude "mods/*" --exclude "world/*" --exclude "config/*"
+aws s3 cp "s3://${BUCKET_NAME}/server-bin/run.sh" "${SERVER_DIR}/run.sh" 2>/dev/null || true
 
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
 aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete

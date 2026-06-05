@@ -51,11 +51,15 @@ tasks:
   # ── Deploy ────────────────────────────────────────────────────────────────
 
   deploy:
-    desc: "Full deploy: bucket → upload mods/config → install server → server stack → status"
+    desc: "Full deploy: bucket → upload mods/config → server stack → status (SKIP_UPLOADS=true to skip uploads)"
+    vars:
+      SKIP_UPLOADS: '{{.SKIP_UPLOADS | default "false"}}'
     cmds:
       - task: deploy-bucket
       - task: upload-server
+        if: '{{ne .SKIP_UPLOADS "true"}}'
       - task: upload-mods
+        if: '{{ne .SKIP_UPLOADS "true"}}'
       - task: deploy-instance
       - task: deploy-api
       - task: status

@@ -13,7 +13,8 @@ export type StartResult =
       port: number;
     }
   | { status: "already_running"; instanceId: string }
-  | { status: "volume_in_use"; volumeId: string };
+  | { status: "volume_in_use"; volumeId: string }
+  | { status: "no_capacity"; types: string[]; az: string };
 
 export type StopResult =
   | { status: "stopped"; instanceId: string }

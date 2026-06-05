@@ -10,7 +10,7 @@ import { buildUserDataBundle } from "./build-user-data";
 
 export interface MinecraftStackProps extends cdk.StackProps {
   bucket: s3.IBucket;
-  instanceType: string;
+  instanceTypes: string[];
   volumeSize: number;
   sshKeyName?: string;
   sshCidr: string;
@@ -21,7 +21,7 @@ export interface MinecraftStackProps extends cdk.StackProps {
   idleShutdownTimer: number;
   /** Java major version for Amazon Corretto on the instance. Default: "21". */
   javaVersion: string;
-  /** Amazon Linux 2023 AMI CPU. Must match `instanceType` (e.g. ARM_64 for m7g / Graviton). Default: X86_64. */
+  /** Amazon Linux 2023 AMI CPU. Must match `instanceTypes` arch (e.g. ARM_64 for m7g/m6g Graviton). Default: X86_64. */
   amazonLinuxCpuType: ec2.AmazonLinuxCpuType;
 }
 
@@ -196,7 +196,8 @@ export class MinecraftStack extends cdk.Stack {
     // TagSpecifications ensure instances launched from this template (including
     // spot relaunches) always receive the Name tag, independent of CloudFormation.
     const launchTemplate = new ec2.LaunchTemplate(this, "LaunchTemplate", {
-      instanceType: new ec2.InstanceType(props.instanceType),
+      // required even if we override with fleet requests because EC2 will default to a `t2.small` otherwise
+      instanceType: new ec2.InstanceType(props.instanceTypes[0]),
       machineImage: ec2.MachineImage.latestAmazonLinux2023({
         cpuType: props.amazonLinuxCpuType,
       }),
@@ -215,10 +216,6 @@ export class MinecraftStack extends cdk.Stack {
           }),
         },
       ],
-      spotOptions: {
-        interruptionBehavior: ec2.SpotInstanceInterruption.STOP,
-        requestType: ec2.SpotRequestType.PERSISTENT,
-      },
       launchTemplateName: "MinecraftServer",
     });
 

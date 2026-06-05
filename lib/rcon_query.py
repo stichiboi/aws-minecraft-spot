@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal RCON client: sends /list and prints the online player count."""
+"""Minimal RCON client. Default: /list player count. With a 3rd arg: run that command."""
 import socket, struct, sys, re
 
 def rcon_exec(host, port, password, cmd):
@@ -42,7 +42,11 @@ def rcon_exec(host, port, password, cmd):
 
 port     = int(sys.argv[1])
 password = sys.argv[2]
-resp     = rcon_exec('127.0.0.1', port, password, 'list')
-# "There are X of a max of Y players online: ..."
-m = re.search(r'There are (\d+)', resp)
-print(m.group(1) if m else '0')
+cmd      = sys.argv[3] if len(sys.argv) > 3 else 'list'
+resp     = rcon_exec('127.0.0.1', port, password, cmd)
+if cmd == 'list':
+    # "There are X of a max of Y players online: ..."
+    m = re.search(r'There are (\d+)', resp)
+    print(m.group(1) if m else '0')
+else:
+    print(resp)

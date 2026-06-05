@@ -15,6 +15,8 @@ jq -r '
     "Already running: \(.instanceId)"
   elif .status == "started" then
     "Server starting...\nInstance: \(.instanceId) (\(.instanceType))\nConnect:  \(.fqdn):\(.port)"
+  elif .status == "no_capacity" then
+    "No spot capacity in \(.az). Tried: \(.types | join(", ")). Try again in a few minutes."
   else
     .
   end

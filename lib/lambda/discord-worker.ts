@@ -168,6 +168,8 @@ function formatForDiscord(
       return `⚠️ Instance \`${result.instanceId}\` is already pending/running.`;
     case "volume_in_use":
       return `⚠️ Cannot start: data volume \`${result.volumeId}\` is still attached to the previous instance. Wait a moment and try again.`;
+    case "no_capacity":
+      return `⚠️ **No spot capacity available** in \`${result.az}\`.\nTried: ${result.types.map((t) => `\`${t}\``).join(", ")}.\nPlease try again in a few minutes.`;
     case "stopped":
       return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.`;
     case "already_terminating":

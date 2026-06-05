@@ -106,30 +106,24 @@ Set `javaVersion` in `cdk.json` context (default `"21"`):
 
 This is pushed to SSM Parameter Store on deploy. The per-boot script reads it from SSM and installs the matching Amazon Corretto version. To change Java version, edit `cdk.json` and run `task deploy-instance`.
 
-### Instance type
+### Instance types (EC2 Fleet)
 
-Edit `instanceType` in `cdk.json`:
+The server uses an **EC2 Fleet** (`instant` type, `capacity-optimized` spot allocation) to launch from a prioritized list of instance types. This reduces "no spot capacity" failures by letting AWS pick whichever type has availability.
+
+Edit `instanceTypes` in `cdk.json`:
 
 ```json
 {
   "context": {
-    "amazonLinuxCpuType": "x86_64",
-    "instanceType": "r5.large"
+    "amazonLinuxCpuType": "ARM_64",
+    "instanceTypes": ["m7g.xlarge", "m6g.xlarge", "m7g.large", "m6g.large"]
   }
 }
 ```
 
-For **Graviton** types (e.g. `m7g.xlarge`), set `"amazonLinuxCpuType": "ARM_64"` so the AL2023 AMI is ARM64.
+All types in the list **must share the same CPU architecture** — the AMI is built for one arch only. For Graviton (ARM) types (`m7g.*`, `m6g.*`, `c7g.*`, `r7g.*`), set `"amazonLinuxCpuType": "ARM_64"`. For x86 types, use `"X86_64"`.
 
-`task start-server` reads this value at launch time and passes it to `run-instances`, so **no CDK deploy is needed** — just stop the server, edit `cdk.json`, and start it again:
-
-```bash
-task stop-server
-# edit cdk.json
-task start-server
-```
-
-Run `task deploy-instance` afterwards if you also want the launch template updated for future spot relaunches (e.g. after an interruption).
+After editing, run `task deploy SKIP_UPLOADS=true` to update both the launch template (used as the fleet's base) and the Lambda environment variable. The Lambda reads the list at runtime and passes all types as fleet overrides — AWS picks the one with the most available spot capacity.
 
 ### JVM memory and GC settings
 
@@ -182,7 +176,7 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 
 ## Architecture
 
-- **EC2 Spot** (`r5.large` default) with **stop** interruption - instance stops, not terminated; EBS data volume is reattached on next boot.
+- **EC2 Fleet** (spot, `capacity-optimized`) — the Lambda creates an `instant` fleet with multiple instance type overrides from `cdk.json`. AWS picks the type with the most spot capacity. Instances are terminated on stop; the EBS data volume is reattached on next boot.
 - **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. Replacing or resizing the instance in CDK does **not** create a new data volume; the same volume is attached each boot.
 - **Small root volume** (8GB gp3) on the instance for the OS only.
 - **S3** - `server/`, `mods/`, `mods-config/`, `server-bin/`, `tools/`; `upload-mods.sh` pushes local `resources/` into the bucket.

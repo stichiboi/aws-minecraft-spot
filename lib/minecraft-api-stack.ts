@@ -13,7 +13,7 @@ export interface MinecraftApiStackProps extends cdk.StackProps {
   discordApplicationId: string;
   minecraftPort: number;
   serverFqdn: string;
-  instanceType: string;
+  instanceTypes: string[];
 }
 
 export class MinecraftApiStack extends cdk.Stack {
@@ -38,6 +38,7 @@ export class MinecraftApiStack extends cdk.Stack {
         "ec2:DescribeInstanceStatus",
         "ec2:DescribeVolumes",
         "ec2:RunInstances",
+        "ec2:CreateFleet",
         "ec2:TerminateInstances",
         "ec2:CancelSpotInstanceRequests",
         "ec2:DescribeSubnets",
@@ -64,7 +65,7 @@ export class MinecraftApiStack extends cdk.Stack {
       LAUNCH_TEMPLATE_NAME: "MinecraftServer",
       MINECRAFT_PORT: String(props.minecraftPort),
       SERVER_FQDN: props.serverFqdn,
-      INSTANCE_TYPE: props.instanceType,
+      INSTANCE_TYPES: JSON.stringify(props.instanceTypes),
     };
 
     // ── Server Management Lambda (EC2 start/stop/status — directly invocable) ──

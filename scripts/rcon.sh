@@ -16,17 +16,19 @@ echo "RCON: ${COMMAND}"
 # everything else uses \${...} so it expands on the EC2 instance.
 REMOTE_SCRIPT=$(cat <<EOF
 set -euo pipefail
-RCON_BIN=/usr/local/bin/rcon
-if [[ ! -x "\${RCON_BIN}" ]]; then
-  echo "Installing rcon..."
-  TMP=\$(mktemp -d)
-  curl -fsSL https://github.com/gorcon/rcon-cli/releases/download/v0.10.3/rcon-0.10.3-amd64_linux.tar.gz \\
-    | tar -xz -C "\${TMP}"
-  mv "\${TMP}/rcon-0.10.3-amd64_linux/rcon" "\${RCON_BIN}"
-  chmod +x "\${RCON_BIN}"
-  rm -rf "\${TMP}"
+SERVER_DIR=/opt/minecraft/data/server
+get_prop() {
+  grep -E "^\$1=" "\${SERVER_DIR}/server.properties" \\
+    | head -1 | cut -d'=' -f2- | tr -d '[:space:]'
+}
+RCON_PORT=\$(get_prop "rcon.port")
+RCON_PASSWORD=\$(get_prop "rcon.password")
+RCON_PORT="\${RCON_PORT:-25575}"
+if [[ -z "\${RCON_PASSWORD}" ]]; then
+  echo "ERROR: rcon.password not set in server.properties" >&2
+  exit 1
 fi
-\${RCON_BIN} --address 127.0.0.1:25575 --password "password" "${COMMAND}"
+python3 /opt/minecraft/rcon_query.py "\${RCON_PORT}" "\${RCON_PASSWORD}" "${COMMAND}"
 EOF
 )
 

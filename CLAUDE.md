@@ -2,6 +2,15 @@
 
 Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash scripts for EC2 boot; shell scripts for dev-machine operations. Use `task` (Taskfile.yml) to run everything.
 
+## Instance Lifecycle (EC2 Fleet)
+
+The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of `RunInstances`. The Lambda reads `INSTANCE_TYPES` (JSON array from `cdk.json` context `instanceTypes`) and passes all types as fleet overrides — AWS picks the one with the most spot capacity.
+
+- All types must share the same CPU arch (matching `amazonLinuxCpuType` in `cdk.json`).
+- The launch template sets the first type as a default (for the CloudFormation-managed instance); the fleet overrides it at runtime.
+- On start: Lambda checks volume is `available` → creates fleet → new instance boots → `per-boot.sh` attaches EBS volume by ID (from SSM) → mounts → starts Minecraft.
+- On stop: Lambda cancels spot request → terminates instance → volume becomes `available`.
+
 ## File Map
 
 | Path | Purpose |
@@ -33,7 +42,7 @@ Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash s
 | `resources/server/` | Gitignored: jvm-args.txt, server.properties (uploaded to S3 `server/` prefix) |
 | `Taskfile.yml` | All runnable tasks — source of truth for workflow |
 | `lib/minecraft-api-stack.ts` | CDK stack: API Gateway + Lambda functions |
-| `lib/lambda/server-management.ts` | Lambda: EC2 start/stop/status logic — directly invocable |
+| `lib/lambda/server-management.ts` | Lambda: EC2 Fleet start / terminate stop / status — directly invocable |
 | `lib/lambda/discord-handler.ts` | Lambda: Ed25519 signature verification + command routing |
 | `lib/lambda/discord-worker.ts` | Lambda: calls server-management + posts Discord follow-up |
 | `discord/register-commands.ts` | One-time script: registers /start /stop /status with Discord |
