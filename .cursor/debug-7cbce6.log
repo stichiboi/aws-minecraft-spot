@@ -1,1 +1,0 @@
-{"sessionId":"7cbce6","timestamp":1780350314000,"location":"sync-server.sh:diag","message":"EC2 neoforge version state","data":{"instanceId":"i-04c0f5132a12abc39","diag":"/opt/minecraft/data/server/libraries/net/neoforged/neoforge|/opt/minecraft/data/server/libraries/net/neoforged/neoforge/21.1.233|neoforge/21.1.233|1780349510 358||"},"hypothesisId":"H-B"}

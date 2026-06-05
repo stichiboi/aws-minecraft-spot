@@ -15,3 +15,5 @@ resources/
 *.pem
 
 server-paths.txt
+
+*.log
