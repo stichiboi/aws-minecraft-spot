@@ -17,7 +17,7 @@
   },
   "context": {
     "amazonLinuxCpuType": "ARM_64",
-    "instanceTypes": ["m7g.xlarge", "m6g.xlarge", "m7g.large", "m6g.large"],
+    "instanceTypes": ["m7g.xlarge", "m6g.xlarge", "m8g.xlarge", "c6g.xlarge", "c7g.xlarge"],
     "volumeSize": 30,
     "sshKeyName": "",
     "sshCidr": "0.0.0.0/0",

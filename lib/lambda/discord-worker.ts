@@ -239,7 +239,9 @@ export const handler = async (event: WorkerPayload): Promise<void> => {
   const { commandName, applicationId } = event;
   console.log("handler invoked", { commandName, applicationId });
   try {
-    const result = await runCommand(commandName);
+    const result = await runCommand(commandName, {
+      instanceType: event.instanceType,
+    });
     const message = formatForDiscord(commandName, result);
     console.log("handler: command completed, sending follow-up", {
       contentLength: message.length,

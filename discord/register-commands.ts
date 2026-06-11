@@ -26,6 +26,15 @@ const commands = [
   {
     name: "start",
     description: "Start the Minecraft server",
+    options: [
+      {
+        name: "instance_type",
+        description:
+          "EC2 instance type to launch (must be in the configured fleet types)",
+        type: 3,
+        required: false,
+      },
+    ],
   },
   {
     name: "stop",

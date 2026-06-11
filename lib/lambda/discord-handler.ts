@@ -48,12 +48,21 @@ export const handler = async (
   // Slash command — deferred response, invoke worker asynchronously
   if (interaction.type === 2) {
     const commandName = interaction.data.name as WorkerPayload["commandName"];
-    console.log("handler: dispatching slash command", { commandName, applicationId: interaction.application_id });
+    const options = interaction.data.options as
+      | Array<{ name: string; value: string }>
+      | undefined;
+    const instanceType = options?.find((o) => o.name === "instance_type")?.value;
+    console.log("handler: dispatching slash command", {
+      commandName,
+      instanceType,
+      applicationId: interaction.application_id,
+    });
 
     const payload: WorkerPayload = {
       commandName,
       interactionToken: interaction.token as string,
       applicationId: interaction.application_id as string,
+      ...(instanceType && { instanceType }),
     };
 
     await lambdaClient.send(

@@ -108,7 +108,17 @@ async function getDataVolumeState(): Promise<{ volumeId: string; state: string }
   return { volumeId: vol.VolumeId, state: vol.State ?? "unknown" };
 }
 
-async function startServer(): Promise<StartResult> {
+function resolveFleetInstanceTypes(instanceType?: string): string[] {
+  if (!instanceType) return INSTANCE_TYPES;
+  if (!INSTANCE_TYPES.includes(instanceType)) {
+    throw new Error(
+      `Instance type "${instanceType}" is not allowed. Must be one of: ${INSTANCE_TYPES.join(", ")}`
+    );
+  }
+  return [instanceType];
+}
+
+async function startServer(instanceType?: string): Promise<StartResult> {
   console.log("startServer: checking for existing pending/running instance", {
     tag: INSTANCE_TAG,
   });
@@ -154,9 +164,10 @@ async function startServer(): Promise<StartResult> {
   }
   console.log("startServer: found subnet", { subnetId, az: subnet.AvailabilityZone });
 
+  const fleetInstanceTypes = resolveFleetInstanceTypes(instanceType);
   console.log("startServer: creating fleet", {
     launchTemplate: LAUNCH_TEMPLATE_NAME,
-    instanceTypes: INSTANCE_TYPES,
+    instanceTypes: fleetInstanceTypes,
     subnetId,
   });
   const fleet = await ec2.send(
@@ -175,7 +186,7 @@ async function startServer(): Promise<StartResult> {
             LaunchTemplateName: LAUNCH_TEMPLATE_NAME,
             Version: "$Latest",
           },
-          Overrides: INSTANCE_TYPES.map((type) => ({
+          Overrides: fleetInstanceTypes.map((type) => ({
             InstanceType: type as never,
             SubnetId: subnetId,
           })),
@@ -197,7 +208,7 @@ async function startServer(): Promise<StartResult> {
     });
     return {
       status: "no_capacity",
-      types: INSTANCE_TYPES,
+      types: fleetInstanceTypes,
       az: subnet.AvailabilityZone ?? "unknown",
     };
   }
@@ -209,7 +220,7 @@ async function startServer(): Promise<StartResult> {
   return {
     status: "started",
     instanceId: launched,
-    instanceType: launchedType ?? INSTANCE_TYPES[0],
+    instanceType: launchedType ?? fleetInstanceTypes[0],
     fqdn: SERVER_FQDN,
     port: MINECRAFT_PORT,
   };
@@ -506,12 +517,17 @@ async function getStatus(): Promise<StatusResult> {
 
 export type CommandName = "start" | "stop" | "status";
 
+export type RunCommandOptions = {
+  instanceType?: string;
+};
+
 export async function runCommand(
-  commandName: CommandName
+  commandName: CommandName,
+  options?: RunCommandOptions
 ): Promise<CommandResult> {
   switch (commandName) {
     case "start":
-      return startServer();
+      return startServer(options?.instanceType);
     case "stop":
       return stopServer();
     case "status":
@@ -523,9 +539,15 @@ export async function runCommand(
 
 export const handler = async (event: {
   commandName: CommandName;
+  instanceType?: string;
 }): Promise<CommandResult> => {
-  console.log("handler invoked", { commandName: event.commandName });
-  const result = await runCommand(event.commandName);
+  console.log("handler invoked", {
+    commandName: event.commandName,
+    instanceType: event.instanceType,
+  });
+  const result = await runCommand(event.commandName, {
+    instanceType: event.instanceType,
+  });
   console.log("handler complete", { commandName: event.commandName, result });
   return result;
 };
