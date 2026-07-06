@@ -54,6 +54,7 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 | `lib/lambda/utils/network.ts` | TCP port probe |
 | `lib/lambda/utils/cloudwatch.ts` | CloudWatch metric fetch |
 | `lib/lambda/types.ts` | Shared Lambda result types |
+| `lib/lambda/test/` | Vitest unit tests for server-management modules |
 | `lib/lambda/discord-handler.ts` | Lambda: Ed25519 signature verification + command routing |
 | `lib/lambda/discord-worker.ts` | Lambda: calls server-management + posts Discord follow-up |
 | `discord/register-commands.ts` | One-time script: registers /start /stop /status with Discord |
