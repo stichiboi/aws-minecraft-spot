@@ -73,7 +73,11 @@ describe("stop-server", () => {
       State: { Name: "running" },
       SpotInstanceRequestId: "None",
     });
-    runGracefulShutdown.mockResolvedValue({ ok: false, detail: "rcon timeout" });
+    runGracefulShutdown.mockResolvedValue({
+      ok: false,
+      detail: "rcon timeout",
+      log: "2026-01-01 00:00:00 [graceful-shutdown] ERROR: rcon timeout",
+    });
     mockEc2Send.mockResolvedValue({});
 
     const result = await stopServer();
@@ -82,6 +86,7 @@ describe("stop-server", () => {
       status: "stopped",
       instanceId: "i-run",
       graceful: false,
+      gracefulLog: "2026-01-01 00:00:00 [graceful-shutdown] ERROR: rcon timeout",
     });
     expect(mockEc2Send).toHaveBeenCalledTimes(1);
     expect(mockEc2Send).toHaveBeenCalledWith(

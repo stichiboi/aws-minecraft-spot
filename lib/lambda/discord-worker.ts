@@ -174,7 +174,10 @@ function formatForDiscord(
       const saveLine = result.graceful
         ? "> **Save:** ✅ world saved gracefully"
         : "> **Save:** ⚠️ graceful save failed — terminating anyway";
-      return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.\n${saveLine}`;
+      const logBlock = result.gracefulLog
+        ? `\n\`\`\`\n${result.gracefulLog.slice(0, 1500)}\n\`\`\``
+        : "";
+      return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.\n${saveLine}${logBlock}`;
     }
     case "already_terminating":
       return `⭕ Instance \`${result.instanceId}\` is already terminating.`;

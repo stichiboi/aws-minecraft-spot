@@ -18,7 +18,13 @@ export type StartResult =
   | { status: "no_capacity"; types: string[]; az: string };
 
 export type StopResult =
-  | { status: "stopped"; instanceId: string; graceful: boolean }
+  | {
+      status: "stopped";
+      instanceId: string;
+      graceful: boolean;
+      /** SSM/graceful-shutdown output when graceful save was attempted but failed */
+      gracefulLog?: string;
+    }
   | { status: "already_terminating"; instanceId: string }
   | { status: "not_found" };
 

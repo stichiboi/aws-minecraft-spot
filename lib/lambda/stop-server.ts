@@ -28,10 +28,12 @@ export async function stopServer(): Promise<StopResult> {
   }
 
   let graceful = false;
+  let gracefulLog: string | undefined;
   if (state === "running") {
     const gracefulResult = await runGracefulShutdown(InstanceId);
     graceful = gracefulResult.ok;
     if (!graceful) {
+      gracefulLog = gracefulResult.log;
       console.warn("stopServer: graceful shutdown failed — terminating anyway", gracefulResult);
     }
   }
@@ -50,5 +52,10 @@ export async function stopServer(): Promise<StopResult> {
   console.log("stopServer: terminating instance", { instanceId: InstanceId });
   await ec2.send(new TerminateInstancesCommand({ InstanceIds: [InstanceId] }));
 
-  return { status: "stopped", instanceId: InstanceId, graceful };
+  return {
+    status: "stopped",
+    instanceId: InstanceId,
+    graceful,
+    ...(gracefulLog ? { gracefulLog } : {}),
+  };
 }

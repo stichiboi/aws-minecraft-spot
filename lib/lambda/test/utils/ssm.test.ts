@@ -77,18 +77,23 @@ describe("utils/ssm", () => {
       expect(result).toEqual({ ok: true, detail: "shutdown complete" });
     });
 
-    it("returns not ok when the command fails", async () => {
+    it("returns not ok with combined output when the command fails", async () => {
       mockSsmSend
         .mockResolvedValueOnce({ Command: { CommandId: "cmd-1" } })
         .mockResolvedValueOnce({
           Status: "Failed",
-          StandardOutputContent: "",
+          StandardOutputContent:
+            "2026-01-01 00:00:00 [graceful-shutdown] Starting graceful Minecraft shutdown\n",
           StandardErrorContent: "rcon timeout",
         });
 
       const result = await runGracefulShutdown("i-1");
 
-      expect(result).toEqual({ ok: false, detail: "rcon timeout" });
+      expect(result).toEqual({
+        ok: false,
+        detail: "rcon timeout",
+        log: "2026-01-01 00:00:00 [graceful-shutdown] Starting graceful Minecraft shutdown\nrcon timeout",
+      });
     });
   });
 });

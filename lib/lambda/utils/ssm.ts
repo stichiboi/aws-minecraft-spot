@@ -64,9 +64,13 @@ export async function runSsmShellCommand(
   return { status: "TimedOut", stdout: "", stderr: "timed out waiting for SSM result" };
 }
 
+function formatSsmOutput(stdout: string, stderr: string): string {
+  return [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
+}
+
 export async function runGracefulShutdown(
   instanceId: string
-): Promise<{ ok: boolean; detail: string }> {
+): Promise<{ ok: boolean; detail: string; log?: string }> {
   console.log("runGracefulShutdown: sending SSM command", { instanceId });
   const result = await runSsmShellCommand(
     instanceId,
@@ -80,7 +84,9 @@ export async function runGracefulShutdown(
     return { ok: true, detail };
   }
 
-  const detail = result.stderr.trim() || result.stdout.trim() || result.status;
-  console.warn("runGracefulShutdown: failed", { status: result.status, detail });
-  return { ok: false, detail };
+  const log =
+    formatSsmOutput(result.stdout, result.stderr) ||
+    `SSM command ${result.status.toLowerCase()}`;
+  console.warn("runGracefulShutdown: failed", { status: result.status, log });
+  return { ok: false, detail: log.split("\n").pop() ?? log, log };
 }
