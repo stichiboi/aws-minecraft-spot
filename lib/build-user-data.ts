@@ -36,8 +36,6 @@ export function buildUserDataBundle(
 
   const embeddedScripts = [
     embedScript(dir, "monitor.sh", "/opt/minecraft/monitor.sh"),
-    embedScript(dir, "graceful-shutdown.sh", "/opt/minecraft/graceful-shutdown.sh"),
-    embedScript(dir, "spot-termination-watch.sh", "/opt/minecraft/spot-termination-watch.sh"),
   ].join("\n");
 
   const userDataScript = userDataTemplate

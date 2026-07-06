@@ -22,16 +22,22 @@ describe("buildUserDataBundle", () => {
     expect(inner.trimEnd()).toBe(perBootRaw.trimEnd());
   });
 
-  it("embeds instance scripts verbatim in heredocs", () => {
+  it("embeds monitor.sh verbatim in user-data (S3-fetched scripts are not embedded)", () => {
     const { userDataScript } = buildUserDataBundle({ templatesDir: LIB_DIR });
-    for (const script of [
-      "monitor.sh",
-      "graceful-shutdown.sh",
-      "spot-termination-watch.sh",
-    ]) {
+    const monitorRaw = fs.readFileSync(
+      path.join(LIB_DIR, "monitor.sh"),
+      "utf-8"
+    );
+    expect(userDataScript).toContain(monitorRaw.trimEnd());
+    for (const script of ["graceful-shutdown.sh", "spot-termination-watch.sh"]) {
       const raw = fs.readFileSync(path.join(LIB_DIR, script), "utf-8");
-      expect(userDataScript).toContain(raw.trimEnd());
+      expect(userDataScript).not.toContain(raw.trimEnd());
     }
+  });
+
+  it("user-data stays within EC2 16 KiB limit", () => {
+    const { userDataScript } = buildUserDataBundle({ templatesDir: LIB_DIR });
+    expect(Buffer.byteLength(userDataScript, "utf8")).toBeLessThanOrEqual(16384);
   });
 
   it("replaces the PER_BOOT_SCRIPT_B64 placeholder", () => {
