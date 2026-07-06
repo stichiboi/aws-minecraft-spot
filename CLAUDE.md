@@ -24,9 +24,9 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 | `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS, runs graceful-shutdown.sh on notice |
 | `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
 | `lib/status_query.py` | EC2 status collector: RCON /list, journal errors/warnings, RAM, disk — outputs JSON (uploaded to S3, pulled at boot) |
-| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor/graceful-shutdown/spot-watch scripts into CDK asset via heredocs |
+| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor.sh into CDK user-data via heredocs |
 | `scripts/upload-server.sh` | Download MC server JAR + upload server files (JAR, config, rcon) to S3 |
-| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, rcon_query.py, status_query.py to S3 |
+| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, and `tools/` boot scripts to S3 (also run by deploy-instance) |
 | `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |
 | `scripts/sync-server.sh` | Sync server files from S3 to running instance via SSM (no restart) |
 | `scripts/sync-mods.sh` | Sync mods + mod configs from S3 to running instance via SSM (no restart) |

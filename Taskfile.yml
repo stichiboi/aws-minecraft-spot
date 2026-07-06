@@ -72,7 +72,7 @@ tasks:
 
   deploy-instance:
     internal: true
-    desc: Deploy the MinecraftServer stack (EC2, networking, DNS)
+    desc: Upload boot tools to S3, then deploy the MinecraftServer stack (EC2, networking, DNS)
     cmds:
       - bash scripts/deploy-instance.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
 
