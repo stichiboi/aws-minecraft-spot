@@ -44,7 +44,16 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 | `resources/server/` | Gitignored: jvm-args.txt, server.properties (uploaded to S3 `server/` prefix) |
 | `Taskfile.yml` | All runnable tasks — source of truth for workflow |
 | `lib/minecraft-api-stack.ts` | CDK stack: API Gateway + Lambda functions |
-| `lib/lambda/server-management.ts` | Lambda: EC2 Fleet start / terminate stop / status — directly invocable |
+| `lib/lambda/server-management.ts` | Lambda entry: routes start/stop/status commands — directly invocable |
+| `lib/lambda/start-server.ts` | EC2 Fleet start logic |
+| `lib/lambda/stop-server.ts` | Graceful shutdown + spot cancel + terminate |
+| `lib/lambda/get-status.ts` | Instance lookup, port probe, CloudWatch + SSM stats |
+| `lib/lambda/config.ts` | Shared env vars and AWS SDK clients |
+| `lib/lambda/utils/ec2.ts` | EC2 helpers: getInstance, getDataVolumeState, isInstanceInitializing |
+| `lib/lambda/utils/ssm.ts` | SSM helpers: runSsmShellCommand, runGracefulShutdown |
+| `lib/lambda/utils/network.ts` | TCP port probe |
+| `lib/lambda/utils/cloudwatch.ts` | CloudWatch metric fetch |
+| `lib/lambda/types.ts` | Shared Lambda result types |
 | `lib/lambda/discord-handler.ts` | Lambda: Ed25519 signature verification + command routing |
 | `lib/lambda/discord-worker.ts` | Lambda: calls server-management + posts Discord follow-up |
 | `discord/register-commands.ts` | One-time script: registers /start /stop /status with Discord |
