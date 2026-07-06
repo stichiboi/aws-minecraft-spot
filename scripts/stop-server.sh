@@ -16,7 +16,11 @@ jq -r '
   elif .status == "already_terminating" then
     "Instance \(.instanceId) is already terminating."
   elif .status == "stopped" then
-    "Server stopped. Instance \(.instanceId) is terminating."
+    if .graceful then
+      "Server stopped. Instance \(.instanceId) is terminating (world saved gracefully)."
+    else
+      "Server stopped. Instance \(.instanceId) is terminating (graceful save failed)."
+    end
   else
     .
   end

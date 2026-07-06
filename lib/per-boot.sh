@@ -132,7 +132,10 @@ aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete
 aws s3 sync "s3://${BUCKET_NAME}/datapacks/" "${SERVER_DIR}/world/datapacks/" --delete
 aws s3 cp "s3://${BUCKET_NAME}/tools/rcon_query.py" /opt/minecraft/rcon_query.py
 aws s3 cp "s3://${BUCKET_NAME}/tools/status_query.py" /opt/minecraft/status_query.py
-chmod +x /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py
+aws s3 cp "s3://${BUCKET_NAME}/tools/graceful-shutdown.sh" /opt/minecraft/graceful-shutdown.sh
+aws s3 cp "s3://${BUCKET_NAME}/tools/spot-termination-watch.sh" /opt/minecraft/spot-termination-watch.sh
+chmod +x /opt/minecraft/rcon_query.py /opt/minecraft/status_query.py \
+  /opt/minecraft/graceful-shutdown.sh /opt/minecraft/spot-termination-watch.sh
 
 aws s3 cp "s3://${BUCKET_NAME}/tools/simplebackups-s3-watcher.sh" /opt/minecraft/simplebackups-s3-watcher.sh
 chmod 755 /opt/minecraft/simplebackups-s3-watcher.sh
@@ -188,6 +191,10 @@ chown -R "${MC_USER}:${MC_USER}" "${MC_DATA}"
 
 systemctl restart minecraft.service
 systemctl restart minecraft-monitor.service
+if systemctl cat spot-termination-watch.service &>/dev/null; then
+  systemctl enable spot-termination-watch.service 2>/dev/null || true
+  systemctl restart spot-termination-watch.service
+fi
 if systemctl cat simplebackups-s3-watcher.service &>/dev/null; then
   systemctl enable simplebackups-s3-watcher.service 2>/dev/null || true
   systemctl restart simplebackups-s3-watcher.service

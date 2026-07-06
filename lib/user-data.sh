@@ -14,7 +14,7 @@ fi
 
 mkdir -p /var/lib/cloud/scripts/per-boot /etc/minecraft
 # __PER_BOOT_HEREDOC__
-# __MONITOR_HEREDOC__
+# __EMBEDDED_SCRIPTS__
 
 cat > /etc/systemd/system/minecraft.service <<'UNIT'
 [Unit]
@@ -44,8 +44,26 @@ After=minecraft.service
 Type=simple
 User=root
 ExecStart=/opt/minecraft/monitor.sh
-Restart=on-failure
+Restart=always
 RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+cat > /etc/systemd/system/spot-termination-watch.service <<'UNIT'
+[Unit]
+Description=Spot instance termination notice watcher
+After=network-online.target minecraft.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/minecraft/spot-termination-watch.sh
+Restart=always
+RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
@@ -73,6 +91,7 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable minecraft-monitor.service
+systemctl enable spot-termination-watch.service
 systemctl enable simplebackups-s3-watcher.service
 
 /var/lib/cloud/scripts/per-boot/minecraft-boot.sh

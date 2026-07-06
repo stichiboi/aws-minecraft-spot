@@ -9,7 +9,7 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 - All types must share the same CPU arch (matching `amazonLinuxCpuType` in `cdk.json`).
 - The launch template sets the first type as a default (for the CloudFormation-managed instance); the fleet overrides it at runtime.
 - On start: Lambda checks volume is `available` → creates fleet → new instance boots → `per-boot.sh` attaches EBS volume by ID (from SSM) → mounts → starts Minecraft.
-- On stop: Lambda cancels spot request → terminates instance → volume becomes `available`.
+- On stop: Lambda runs graceful-shutdown via SSM → cancels spot request → terminates instance → volume becomes `available`.
 
 ## File Map
 
@@ -19,10 +19,12 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 | `lib/minecraft-bucket-stack.ts` | CDK stack: S3 bucket for mods |
 | `lib/user-data.sh` | EC2 init script (runs once on first boot) |
 | `lib/per-boot.sh` | EC2 boot script (runs on every start) |
-| `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, shuts down after inactivity |
+| `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, invokes stop Lambda after inactivity |
+| `lib/graceful-shutdown.sh` | EC2 graceful Minecraft stop (RCON save-all/stop, systemctl fallback) — invoked by Lambda via SSM and by spot watcher |
+| `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS, runs graceful-shutdown.sh on notice |
 | `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
 | `lib/status_query.py` | EC2 status collector: RCON /list, journal errors/warnings, RAM, disk — outputs JSON (uploaded to S3, pulled at boot) |
-| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor.sh into CDK asset via heredocs |
+| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor/graceful-shutdown/spot-watch scripts into CDK asset via heredocs |
 | `scripts/upload-server.sh` | Download MC server JAR + upload server files (JAR, config, rcon) to S3 |
 | `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, rcon_query.py, status_query.py to S3 |
 | `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |

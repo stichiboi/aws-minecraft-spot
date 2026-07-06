@@ -1,20 +1,21 @@
 #!/bin/bash
-# Restarts the minecraft.service on the running EC2 instance via SSM.
-# Shared by sync-server and sync-mods Taskfile tasks.
+# Restarts minecraft.service and minecraft-monitor.service on the running EC2
+# instance via SSM. Shared by sync-server and sync-mods Taskfile tasks.
 #
 # Usage: restart-server.sh <instance-id>
 set -euo pipefail
 
 INSTANCE_ID="${1:?Usage: restart-server.sh <instance-id>}"
 
-echo "▸ Restarting minecraft.service on ${INSTANCE_ID}..."
+echo "▸ Restarting minecraft.service and minecraft-monitor.service on ${INSTANCE_ID}..."
 
 COMMAND_ID=$(aws ssm send-command \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
   --parameters commands="[
     \"systemctl restart minecraft.service\",
-    \"echo 'minecraft.service restarted.'\"
+    \"systemctl restart minecraft-monitor.service\",
+    \"echo 'minecraft.service and minecraft-monitor.service restarted.'\"
   ]" \
   --query 'Command.CommandId' \
   --output text)

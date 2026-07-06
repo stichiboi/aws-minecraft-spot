@@ -170,8 +170,12 @@ function formatForDiscord(
       return `⚠️ Cannot start: data volume \`${result.volumeId}\` is still attached to the previous instance. Wait a moment and try again.`;
     case "no_capacity":
       return `⚠️ **No spot capacity available** in \`${result.az}\`.\nTried: ${result.types.map((t) => `\`${t}\``).join(", ")}.\nPlease try again in a few minutes.`;
-    case "stopped":
-      return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.`;
+    case "stopped": {
+      const saveLine = result.graceful
+        ? "> **Save:** ✅ world saved gracefully"
+        : "> **Save:** ⚠️ graceful save failed — terminating anyway";
+      return `🛑 **Server stopped.** Instance \`${result.instanceId}\` is terminating.\n${saveLine}`;
+    }
     case "already_terminating":
       return `⭕ Instance \`${result.instanceId}\` is already terminating.`;
     case "not_found":

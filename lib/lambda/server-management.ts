@@ -47,6 +47,9 @@ const INSTANCE_TYPES: string[] = JSON.parse(
   process.env.INSTANCE_TYPES ?? '["r3.large"]'
 );
 const DATA_VOLUME_TAG = process.env.DATA_VOLUME_TAG ?? "MinecraftData";
+const GRACEFUL_SHUTDOWN_SCRIPT = "/opt/minecraft/graceful-shutdown.sh";
+const GRACEFUL_SHUTDOWN_WAIT_MS = 130_000;
+const SSM_POLL_INTERVAL_MS = 2_000;
 
 const STATE_PRIORITY: Record<string, number> = {
   running: 0,
@@ -226,6 +229,80 @@ async function startServer(instanceType?: string): Promise<StartResult> {
   };
 }
 
+async function runSsmShellCommand(
+  instanceId: string,
+  command: string,
+  maxWaitMs: number
+): Promise<{ status: string; stdout: string; stderr: string }> {
+  let commandId: string;
+  try {
+    const send = await ssm.send(
+      new SendCommandCommand({
+        InstanceIds: [instanceId],
+        DocumentName: "AWS-RunShellScript",
+        Parameters: { commands: [command] },
+      })
+    );
+    commandId = send.Command?.CommandId ?? "";
+    if (!commandId) {
+      return { status: "Failed", stdout: "", stderr: "SSM command returned no ID" };
+    }
+  } catch (err) {
+    return { status: "Failed", stdout: "", stderr: (err as Error).message };
+  }
+
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, SSM_POLL_INTERVAL_MS));
+    try {
+      const inv = await ssm.send(
+        new GetCommandInvocationCommand({
+          CommandId: commandId,
+          InstanceId: instanceId,
+        })
+      );
+      const status = inv.Status ?? "Pending";
+      if (status === "Success") {
+        return {
+          status,
+          stdout: inv.StandardOutputContent ?? "",
+          stderr: inv.StandardErrorContent ?? "",
+        };
+      }
+      if (status === "Failed" || status === "TimedOut" || status === "Cancelled") {
+        return {
+          status,
+          stdout: inv.StandardOutputContent ?? "",
+          stderr: inv.StandardErrorContent ?? "",
+        };
+      }
+    } catch (err) {
+      return { status: "Failed", stdout: "", stderr: (err as Error).message };
+    }
+  }
+
+  return { status: "TimedOut", stdout: "", stderr: "timed out waiting for SSM result" };
+}
+
+async function runGracefulShutdown(instanceId: string): Promise<{ ok: boolean; detail: string }> {
+  console.log("runGracefulShutdown: sending SSM command", { instanceId });
+  const result = await runSsmShellCommand(
+    instanceId,
+    GRACEFUL_SHUTDOWN_SCRIPT,
+    GRACEFUL_SHUTDOWN_WAIT_MS
+  );
+
+  if (result.status === "Success") {
+    const detail = result.stdout.trim().split("\n").pop() ?? "completed";
+    console.log("runGracefulShutdown: success", { detail });
+    return { ok: true, detail };
+  }
+
+  const detail = result.stderr.trim() || result.stdout.trim() || result.status;
+  console.warn("runGracefulShutdown: failed", { status: result.status, detail });
+  return { ok: false, detail };
+}
+
 async function stopServer(): Promise<StopResult> {
   console.log("stopServer: looking up instance", { tag: INSTANCE_TAG });
   const instance = await getInstance();
@@ -246,6 +323,15 @@ async function stopServer(): Promise<StopResult> {
     return { status: "already_terminating", instanceId: InstanceId };
   }
 
+  let graceful = false;
+  if (state === "running") {
+    const gracefulResult = await runGracefulShutdown(InstanceId);
+    graceful = gracefulResult.ok;
+    if (!graceful) {
+      console.warn("stopServer: graceful shutdown failed — terminating anyway", gracefulResult);
+    }
+  }
+
   if (SpotInstanceRequestId && SpotInstanceRequestId !== "None") {
     console.log("stopServer: cancelling spot request", {
       spotRequestId: SpotInstanceRequestId,
@@ -260,7 +346,7 @@ async function stopServer(): Promise<StopResult> {
   console.log("stopServer: terminating instance", { instanceId: InstanceId });
   await ec2.send(new TerminateInstancesCommand({ InstanceIds: [InstanceId] }));
 
-  return { status: "stopped", instanceId: InstanceId };
+  return { status: "stopped", instanceId: InstanceId, graceful };
 }
 
 async function getCwMetric(
@@ -311,73 +397,39 @@ async function getStatusQuery(instanceId: string): Promise<StatusQueryResult> {
     logs: { error: reason },
   });
 
-  let commandId: string;
-  try {
-    const send = await ssm.send(
-      new SendCommandCommand({
-        InstanceIds: [instanceId],
-        DocumentName: "AWS-RunShellScript",
-        Parameters: { commands: ["python3 /opt/minecraft/status_query.py"] },
-      })
-    );
-    commandId = send.Command?.CommandId ?? "";
-    if (!commandId) return failed("SSM command returned no ID");
-  } catch (err) {
-    console.warn("getStatusQuery: SendCommand failed", err);
-    return failed((err as Error).message);
-  }
+  const result = await runSsmShellCommand(
+    instanceId,
+    "python3 /opt/minecraft/status_query.py",
+    15_000
+  );
 
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 1500));
+  if (result.status === "Success") {
+    const output = result.stdout;
     try {
-      const inv = await ssm.send(
-        new GetCommandInvocationCommand({
-          CommandId: commandId,
-          InstanceId: instanceId,
-        })
-      );
-      if (inv.Status === "Success") {
-        const output = inv.StandardOutputContent ?? "";
-        try {
-          const parsed = JSON.parse(output);
-          return {
-            ram: parseScalarFromQuery(parsed.ram),
-            disk: parseScalarFromQuery(parsed.disk),
-            rcon: parseRconFromQuery(parsed.rcon),
-            logs: parseLogsFromQuery(parsed.logs),
-          };
-        } catch (parseErr) {
-          console.warn("getStatusQuery: failed to parse JSON", output);
-          return failed("failed to parse status_query.py output");
-        }
-      }
-      if (
-        inv.Status === "Failed" ||
-        inv.Status === "TimedOut" ||
-        inv.Status === "Cancelled"
-      ) {
-        const stderr = inv.StandardErrorContent?.trim() ?? "";
-        const stdout = inv.StandardOutputContent?.trim() ?? "";
-        console.warn("getStatusQuery: command ended with status", inv.Status, { stderr, stdout });
-        const stderrLines = stderr.split("\n").filter((l) => l.trim());
-        // SSM appends its own "failed to run commands: exit status N" as the
-        // last line — the real error is usually right above it.
-        const meaningful = stderrLines.filter(
-          (l) => !l.startsWith("failed to run commands:")
-        );
-        const detail = meaningful.length > 0
-          ? meaningful.slice(-3).join(" | ")
-          : stderrLines.pop() ?? `SSM command ${inv.Status.toLowerCase()}`;
-        return failed(detail);
-      }
-    } catch (err) {
-      console.warn("getStatusQuery: GetCommandInvocation failed", err);
-      return failed((err as Error).message);
+      const parsed = JSON.parse(output);
+      return {
+        ram: parseScalarFromQuery(parsed.ram),
+        disk: parseScalarFromQuery(parsed.disk),
+        rcon: parseRconFromQuery(parsed.rcon),
+        logs: parseLogsFromQuery(parsed.logs),
+      };
+    } catch {
+      console.warn("getStatusQuery: failed to parse JSON", output);
+      return failed("failed to parse status_query.py output");
     }
   }
 
-  console.warn("getStatusQuery: timed out waiting for command result");
-  return failed("timed out waiting for SSM result");
+  const stderr = result.stderr.trim();
+  const stdout = result.stdout.trim();
+  console.warn("getStatusQuery: command ended with status", result.status, { stderr, stdout });
+  const stderrLines = stderr.split("\n").filter((l) => l.trim());
+  const meaningful = stderrLines.filter(
+    (l) => !l.startsWith("failed to run commands:")
+  );
+  const detail = meaningful.length > 0
+    ? meaningful.slice(-3).join(" | ")
+    : (stderrLines.pop() ?? stdout) || `SSM command ${result.status.toLowerCase()}`;
+  return failed(detail);
 }
 
 function parseScalarFromQuery(

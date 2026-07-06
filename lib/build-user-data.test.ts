@@ -22,6 +22,18 @@ describe("buildUserDataBundle", () => {
     expect(inner.trimEnd()).toBe(perBootRaw.trimEnd());
   });
 
+  it("embeds instance scripts verbatim in heredocs", () => {
+    const { userDataScript } = buildUserDataBundle({ templatesDir: LIB_DIR });
+    for (const script of [
+      "monitor.sh",
+      "graceful-shutdown.sh",
+      "spot-termination-watch.sh",
+    ]) {
+      const raw = fs.readFileSync(path.join(LIB_DIR, script), "utf-8");
+      expect(userDataScript).toContain(raw.trimEnd());
+    }
+  });
+
   it("replaces the PER_BOOT_SCRIPT_B64 placeholder", () => {
     const { userDataScript } = buildUserDataBundle({ templatesDir: LIB_DIR });
     expect(userDataScript).not.toContain("${PER_BOOT_SCRIPT_B64}");
