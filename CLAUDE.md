@@ -19,6 +19,7 @@ The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of 
 | `lib/minecraft-bucket-stack.ts` | CDK stack: S3 bucket for mods |
 | `lib/user-data.sh` | EC2 init script (runs once on first boot) |
 | `lib/per-boot.sh` | EC2 boot script (runs on every start) |
+| `lib/start.sh` | Unified server launch script (`java @jvm-args.txt`, uploaded to S3 `tools/`) |
 | `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, invokes stop Lambda after inactivity |
 | `lib/graceful-shutdown.sh` | EC2 graceful Minecraft stop (RCON save-all/stop, systemctl fallback) — invoked by Lambda via SSM and by spot watcher |
 | `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS, runs graceful-shutdown.sh on notice |

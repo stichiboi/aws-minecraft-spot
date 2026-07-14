@@ -125,7 +125,6 @@ echo "Syncing server files from S3..."
 rm -rf "${SERVER_DIR}/libraries"
 aws s3 sync "s3://${BUCKET_NAME}/server-bin/" "${SERVER_DIR}/" \
   --exclude "mods/*" --exclude "world/*" --exclude "config/*"
-aws s3 cp "s3://${BUCKET_NAME}/server-bin/run.sh" "${SERVER_DIR}/run.sh" 2>/dev/null || true
 
 aws s3 sync "s3://${BUCKET_NAME}/mods/" "${MODS_DIR}/" --delete
 aws s3 sync "s3://${BUCKET_NAME}/mods-config/" "${SERVER_DIR}/config/" --delete
@@ -155,15 +154,17 @@ fi
 
 sed -i "s/^server-port=.*/server-port=${MINECRAFT_PORT}/" "${SERVER_DIR}/server.properties"
 
-LAUNCH_CMD="java @jvm-args.txt -jar server.jar nogui"
-if [[ -f "${SERVER_DIR}/run.sh" ]]; then
-  LAUNCH_CMD="bash run.sh"
-fi
-
-cat > "${SERVER_DIR}/start.sh" <<STARTSCRIPT
+aws s3 cp "s3://${BUCKET_NAME}/tools/start.sh" "${SERVER_DIR}/start.sh" \
+  || cat > "${SERVER_DIR}/start.sh" <<'STARTSCRIPT'
 #!/bin/bash
-cd "${SERVER_DIR}"
-exec ${LAUNCH_CMD}
+set -euo pipefail
+cd "/opt/minecraft/data/server"
+UNIX_ARGS=$(find libraries -path '*/unix_args.txt' 2>/dev/null | head -1)
+if [[ -n "${UNIX_ARGS}" ]]; then
+  exec java @jvm-args.txt @"${UNIX_ARGS}" nogui
+else
+  exec java @jvm-args.txt -jar server.jar nogui
+fi
 STARTSCRIPT
 chmod +x "${SERVER_DIR}/start.sh"
 

@@ -17,8 +17,8 @@ COMMAND_ID=$(aws ssm send-command \
   --parameters commands="[
     \"rm -rf /opt/minecraft/data/server/libraries\",
     \"aws s3 sync s3://${BUCKET_NAME}/server-bin/ /opt/minecraft/data/server/ --exclude 'mods/*' --exclude 'world/*' --exclude 'config/*'\",
-    \"aws s3 cp s3://${BUCKET_NAME}/server-bin/run.sh /opt/minecraft/data/server/run.sh 2>/dev/null || true\",
     \"aws s3 cp s3://${BUCKET_NAME}/server/jvm-args.txt /opt/minecraft/data/server/jvm-args.txt || true\",
+    \"aws s3 cp s3://${BUCKET_NAME}/tools/start.sh /opt/minecraft/data/server/start.sh && chmod +x /opt/minecraft/data/server/start.sh\",
     \"aws s3 cp s3://${BUCKET_NAME}/server/server.properties /opt/minecraft/data/server/server.properties || true\",
     \"aws s3 cp s3://${BUCKET_NAME}/tools/rcon_query.py /opt/minecraft/rcon_query.py && chmod +x /opt/minecraft/rcon_query.py\",
     \"aws s3 cp s3://${BUCKET_NAME}/tools/status_query.py /opt/minecraft/status_query.py && chmod +x /opt/minecraft/status_query.py\",

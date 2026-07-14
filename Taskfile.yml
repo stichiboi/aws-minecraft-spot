@@ -185,6 +185,15 @@ tasks:
     cmds:
       - bash scripts/rcon.sh {{.INSTANCE_ID}} {{.CLI_ARGS}}
 
+  logs:
+    desc: "Show recent Minecraft server logs via SSM"
+    vars:
+      LINES: '{{.LINES | default "200"}}'
+      INSTANCE_ID:
+        sh: bash scripts/get-instance-id.sh
+    cmds:
+      - bash scripts/ssm.sh {{.INSTANCE_ID}} "journalctl -u minecraft.service --no-pager -n {{.LINES}}"
+
   # ── Maintenance ───────────────────────────────────────────────────────────
 
   reset-world:

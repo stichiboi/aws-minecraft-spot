@@ -1,7 +1,6 @@
 #!/bin/bash
-# Uploads server config files (server.properties, jvm-args.txt) and the RCON
-# helper to S3.  Called by upload-server.sh after the heavy JAR upload, and
-# independently by the sync-server Taskfile task for quick config pushes.
+# Uploads server config files (server.properties, jvm-args.txt), the unified
+# launch script (start.sh), and the RCON helper to S3.
 #
 # Usage: upload-server-config.sh <bucket-name>
 set -euo pipefail
@@ -27,6 +26,7 @@ fi
 # ── Tools (RCON helper, status query) ─────────────────────────────────────
 echo ""
 echo "▸ Uploading tools to s3://${BUCKET_NAME}/tools/..."
+aws s3 cp "${PROJECT_DIR}/lib/start.sh" "s3://${BUCKET_NAME}/tools/start.sh"
 aws s3 cp "${PROJECT_DIR}/lib/rcon_query.py" "s3://${BUCKET_NAME}/tools/rcon_query.py"
 aws s3 cp "${PROJECT_DIR}/lib/status_query.py" "s3://${BUCKET_NAME}/tools/status_query.py"
 aws s3 cp "${PROJECT_DIR}/lib/simplebackups-s3-watcher.sh" "s3://${BUCKET_NAME}/tools/simplebackups-s3-watcher.sh"
