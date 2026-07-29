@@ -188,7 +188,7 @@ tasks:
   logs:
     desc: "Show recent Minecraft server logs via SSM"
     vars:
-      LINES: '{{.LINES | default "200"}}'
+      LINES: '{{.LINES | default "100"}}'
       INSTANCE_ID:
         sh: bash scripts/get-instance-id.sh
     cmds:
