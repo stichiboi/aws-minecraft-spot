@@ -98,6 +98,7 @@ tasks:
         sh: bash scripts/get-bucket-name.sh
     cmds:
       - bash scripts/upload-server.sh {{.BUCKET_NAME}}
+      - echo "Run task sync-server to sync the server config to the instance"
 
   upload-mods:
     desc: Upload mods and mod configs to S3
@@ -111,6 +112,7 @@ tasks:
       - ./resources/datapacks/*.zip
     cmds:
       - bash scripts/upload-mods.sh {{.BUCKET_NAME}}
+      - echo "Run task sync-mods to sync the mods to the instance"
 
   sync-server:
     desc: Upload server config to S3, sync to running instance, and restart
