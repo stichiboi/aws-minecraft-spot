@@ -140,6 +140,18 @@ export class MinecraftStack extends cdk.Stack {
       })
     );
 
+    // per-boot.sh terminates its own instance when boot fails, so a broken
+    // instance never keeps running without the idle monitor.
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ec2:TerminateInstances"],
+        resources: [`arn:aws:ec2:${this.region}:${this.account}:instance/*`],
+        conditions: {
+          StringEquals: { "aws:ResourceTag/Name": INSTANCE_NAME_TAG },
+        },
+      })
+    );
+
     role.addToPolicy(
       new iam.PolicyStatement({
         actions: ["route53:GetChange"],
@@ -159,7 +171,8 @@ export class MinecraftStack extends cdk.Stack {
       ["fqdn",            fqdn],
       ["port",            String(props.minecraftPort)],
       ["shutdown-timer",  String(props.idleShutdownTimer)],
-      ["java-version",    props.javaVersion],
+      ["java-version",        props.javaVersion],
+      ["management-function", SERVER_MANAGEMENT_FUNCTION_NAME],
     ];
     for (const [name, value] of configEntries) {
       new ssm.StringParameter(this, `Param-${name}`, {
@@ -189,20 +202,23 @@ export class MinecraftStack extends cdk.Stack {
       })
     );
 
-    // ── User Data (two-stage: one-time setup + per-boot) ────────────
+    // ── User Data (bootstrap only; real boot logic is pulled from S3) ──
     const userData = ec2.UserData.forLinux();
     const { userDataScript } = buildUserDataBundle({ templatesDir: __dirname });
     userData.addCommands(userDataScript);
 
-    // ── Launch Template (small root volume only) ────────────────────
-    // TagSpecifications ensure instances launched from this template (including
-    // spot relaunches) always receive the Name tag, independent of CloudFormation.
+    // ── Launch Template (used by the EC2 Fleet in start-server.ts) ──
+    // The AMI is resolved from the public SSM parameter at every launch, so a
+    // new AL2023 release never changes the launch template.
+    const amiArch =
+      props.amazonLinuxCpuType === ec2.AmazonLinuxCpuType.ARM_64 ? "arm64" : "x86_64";
     const launchTemplate = new ec2.LaunchTemplate(this, "LaunchTemplate", {
       // required even if we override with fleet requests because EC2 will default to a `t2.small` otherwise
       instanceType: new ec2.InstanceType(props.instanceTypes[0]),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023({
-        cpuType: props.amazonLinuxCpuType,
-      }),
+      machineImage: ec2.MachineImage.resolveSsmParameterAtLaunch(
+        `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-${amiArch}`,
+        { os: ec2.OperatingSystemType.LINUX }
+      ),
       role,
       userData,
       securityGroup: sg,

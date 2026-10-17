@@ -1,6 +1,7 @@
 #!/bin/bash
-# Uploads server config files (server.properties, jvm-args.txt), the unified
-# launch script (start.sh), and the RCON helper to S3.
+# Uploads server config files (server.properties, jvm-args.txt) and every EC2
+# boot/runtime script in lib/ (*.sh, *.py) to s3://BUCKET/tools/. The instance
+# pulls tools/ on every boot (see lib/boot-bootstrap.sh and lib/per-boot.sh).
 #
 # Usage: upload-server-config.sh <bucket-name>
 set -euo pipefail
@@ -23,15 +24,13 @@ else
   echo "▸ No resources/server/ folder found — skipping server config upload."
 fi
 
-# ── Tools (RCON helper, status query) ─────────────────────────────────────
+# ── Tools (boot scripts, monitor, RCON helper, status query, ...) ─────────
+# user-data.sh and boot-bootstrap.sh are baked into the launch template instead.
 echo ""
-echo "▸ Uploading tools to s3://${BUCKET_NAME}/tools/..."
-aws s3 cp "${PROJECT_DIR}/lib/start.sh" "s3://${BUCKET_NAME}/tools/start.sh"
-aws s3 cp "${PROJECT_DIR}/lib/rcon_query.py" "s3://${BUCKET_NAME}/tools/rcon_query.py"
-aws s3 cp "${PROJECT_DIR}/lib/status_query.py" "s3://${BUCKET_NAME}/tools/status_query.py"
-aws s3 cp "${PROJECT_DIR}/lib/simplebackups-s3-watcher.sh" "s3://${BUCKET_NAME}/tools/simplebackups-s3-watcher.sh"
-aws s3 cp "${PROJECT_DIR}/lib/graceful-shutdown.sh" "s3://${BUCKET_NAME}/tools/graceful-shutdown.sh"
-aws s3 cp "${PROJECT_DIR}/lib/spot-termination-watch.sh" "s3://${BUCKET_NAME}/tools/spot-termination-watch.sh"
+echo "▸ Syncing lib/*.sh and lib/*.py to s3://${BUCKET_NAME}/tools/..."
+aws s3 sync "${PROJECT_DIR}/lib/" "s3://${BUCKET_NAME}/tools/" --delete \
+  --exclude "*" --include "*.sh" --include "*.py" \
+  --exclude "*/*" --exclude "user-data.sh" --exclude "boot-bootstrap.sh"
 
 echo ""
 echo "✓ Server config upload complete."
