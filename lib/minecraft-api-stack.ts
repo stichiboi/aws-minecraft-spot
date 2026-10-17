@@ -17,8 +17,6 @@ import {
 
 export interface MinecraftApiStackProps extends cdk.StackProps {
   discordPublicKey: string;
-  discordBotToken: string;
-  discordApplicationId: string;
   minecraftPort: number;
   serverFqdn: string;
   instanceTypes: string[];
@@ -116,17 +114,14 @@ export class MinecraftApiStack extends cdk.Stack {
     serverManagement.addToRolePolicy(amiParameterPolicy);
 
     // ── Worker Lambda (calls server-management logic + posts Discord follow-up) ──
+    // Follow-ups authenticate with the interaction token, so no bot token here.
     const worker = new NodejsFunction(this, "DiscordWorker", {
       functionName: "minecraft-discord-worker",
       entry: "lib/lambda/discord-worker.ts",
       runtime: Runtime.NODEJS_20_X,
       timeout: managementTimeout,
       logGroup: workerLogGroup,
-      environment: {
-        DISCORD_BOT_TOKEN: props.discordBotToken,
-        DISCORD_APPLICATION_ID: props.discordApplicationId,
-        ...ec2Environment,
-      },
+      environment: ec2Environment,
     });
 
     worker.addToRolePolicy(ec2Policy);

@@ -53,8 +53,6 @@ new MinecraftApiStack(app, "MinecraftApi", {
   env,
   description: "Minecraft server Discord bot — API Gateway + Lambda",
   discordPublicKey: process.env.DISCORD_PUBLIC_KEY ?? "",
-  discordBotToken: process.env.DISCORD_BOT_TOKEN ?? "",
-  discordApplicationId: process.env.DISCORD_APPLICATION_ID ?? "",
   minecraftPort: serverStack.minecraftPort,
   serverFqdn: serverStack.fqdn,
   instanceTypes: app.node.tryGetContext("instanceTypes") || ["r3.large"],
