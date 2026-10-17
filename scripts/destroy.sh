@@ -8,7 +8,8 @@ cd "${PROJECT_DIR}"
 
 echo "⚠  This will stop the server and destroy all stacks (MinecraftServer, MinecraftBucket, MinecraftApi)."
 echo "   The S3 bucket and all its contents (mods, backups) will be DELETED."
-echo "   The EBS data volume will also be DELETED."
+echo "   The EBS data volume is deleted after CloudFormation takes a final snapshot"
+echo "   (kept in EC2 → Snapshots until you delete it)."
 echo ""
 read -r -p "Type 'yes' to confirm: " CONFIRM
 echo ""

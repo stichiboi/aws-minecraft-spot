@@ -85,12 +85,14 @@ export class MinecraftStack extends cdk.Stack {
     this.minecraftPort = props.minecraftPort;
 
     // ── Standalone EBS Data Volume ──────────────────────────────────
+    // SNAPSHOT: a replacement (AZ change, construct rename) or stack delete
+    // leaves a final snapshot of the world instead of deleting it.
     const dataVolume = new ec2.Volume(this, "DataVolume", {
       availabilityZone: vpc.publicSubnets[0].availabilityZone,
       size: cdk.Size.gibibytes(props.volumeSize),
       volumeType: ec2.EbsDeviceVolumeType.GP3,
       encrypted: true,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.SNAPSHOT,
     });
 
     cdk.Tags.of(dataVolume).add("Name", DATA_VOLUME_NAME_TAG);
