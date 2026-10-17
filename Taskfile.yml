@@ -206,11 +206,6 @@ tasks:
     cmds:
       - bash scripts/reset-world.sh {{.INSTANCE_ID}}
 
-  cleanup-orphans:
-    desc: "List EC2 orphans (same Name tag, not stack InstanceId); task cleanup-orphans -- --execute"
-    cmds:
-      - bash scripts/cleanup-orphan-instances.sh{{if .CLI_ARGS}} {{.CLI_ARGS}}{{end}}
-
   register-discord-commands:
     desc: Register /start /stop /status slash commands with Discord (run once after creating the app)
     cmds:

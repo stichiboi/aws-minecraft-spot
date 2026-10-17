@@ -96,7 +96,7 @@ export class MinecraftStack extends cdk.Stack {
     cdk.Tags.of(dataVolume).add("Name", DATA_VOLUME_NAME_TAG);
 
     // Force-detach the EBS volume on stack deletion so CloudFormation can delete
-    // it even if a spot-relaunched instance (unknown to CFN) has it attached.
+    // it even if a fleet instance (unknown to CFN) has it attached.
     // Delete order: custom resource runs first (detach), then DataVolume is deleted.
     const detachOnDelete = new cr.AwsCustomResource(this, "DetachVolumeOnDelete", {
       onDelete: {
@@ -226,18 +226,9 @@ export class MinecraftStack extends cdk.Stack {
       launchTemplateName: LAUNCH_TEMPLATE_NAME,
     });
 
-    // ── EC2 Instance ────────────────────────────────────────────────
-    const instance = new ec2.CfnInstance(this, "Server", {
-      launchTemplate: {
-        launchTemplateId: launchTemplate.launchTemplateId,
-        version: launchTemplate.versionNumber,
-      },
-      subnetId: vpc.publicSubnets[0].subnetId,
-    });
-
-    // Propagate the Name tag to instances via the launch template so spot
-    // relaunches are also tagged — cdk.Tags.of(instance) only tags the
-    // CloudFormation-managed instance and becomes stale after a spot relaunch.
+    // Tag every fleet instance so the Lambdas, scripts and IAM conditions can find it.
+    // There is no CloudFormation-managed instance: the fleet creates one on start
+    // and stop terminates it.
     const cfnLaunchTemplate = launchTemplate.node
       .defaultChild as ec2.CfnLaunchTemplate;
     cfnLaunchTemplate.addPropertyOverride(
@@ -256,16 +247,6 @@ export class MinecraftStack extends cdk.Stack {
     // A record manually from the hosted zone.
 
     // ── Outputs ─────────────────────────────────────────────────────
-    new cdk.CfnOutput(this, "InstanceId", {
-      value: instance.ref,
-      description: "EC2 Instance ID",
-    });
-
-    new cdk.CfnOutput(this, "InstancePublicIp", {
-      value: instance.attrPublicIp,
-      description: "EC2 Instance IP",
-    });
-
     new cdk.CfnOutput(this, "ServerAddress", {
       value: fqdn,
       description: "Minecraft server address (connect with this hostname)",
