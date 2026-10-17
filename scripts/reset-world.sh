@@ -33,7 +33,7 @@ if [[ "${CONFIRM}" != "yes" ]]; then
   exit 0
 fi
 
-# Build the list of shell commands to run via SSM.
+# Build the list of shell commands to run via SSM
 # The monitor is stopped first: it would treat the stop as a crash and shut down.
 COMMANDS=(
   "systemctl stop minecraft-monitor.service"
@@ -55,52 +55,11 @@ COMMANDS+=(
   "echo 'Service started.'"
 )
 
-# Encode commands as a JSON array for SSM
-COMMANDS_JSON=$(printf '%s\n' "${COMMANDS[@]}" | jq -R . | jq -s .)
+source "${SCRIPT_DIR}/lib/ssm-run.sh"
 
 echo ""
 echo "▸ Resetting world on instance ${INSTANCE_ID} via SSM..."
-
-COMMAND_ID=$(aws ssm send-command \
-  --instance-ids "${INSTANCE_ID}" \
-  --document-name "AWS-RunShellScript" \
-  --parameters "commands=${COMMANDS_JSON}" \
-  --query 'Command.CommandId' \
-  --output text)
-
-echo "  SSM command ID: ${COMMAND_ID}"
-echo "  Waiting for completion..."
-
-aws ssm wait command-executed \
-  --command-id "${COMMAND_ID}" \
-  --instance-id "${INSTANCE_ID}" 2>/dev/null || true
-
-STATUS=$(aws ssm get-command-invocation \
-  --command-id "${COMMAND_ID}" \
-  --instance-id "${INSTANCE_ID}" \
-  --query 'StatusDetails' \
-  --output text)
-
-OUTPUT=$(aws ssm get-command-invocation \
-  --command-id "${COMMAND_ID}" \
-  --instance-id "${INSTANCE_ID}" \
-  --query 'StandardOutputContent' \
-  --output text)
-
-echo ""
-echo "${OUTPUT}"
-echo "▸ Status: ${STATUS}"
-
-if [[ "${STATUS}" != "Success" ]]; then
-  STDERR=$(aws ssm get-command-invocation \
-    --command-id "${COMMAND_ID}" \
-    --instance-id "${INSTANCE_ID}" \
-    --query 'StandardErrorContent' \
-    --output text)
-  echo ""
-  echo "STDERR: ${STDERR}" >&2
-  exit 1
-fi
+ssm_run "${INSTANCE_ID}" "$(json_array "${COMMANDS[@]}")"
 
 echo ""
 echo "✓ World reset complete. Server is restarting with a fresh world."
