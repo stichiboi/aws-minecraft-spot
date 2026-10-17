@@ -21,13 +21,38 @@ const env: cdk.Environment = {
     "eu-central-1",
 };
 
-function amazonLinuxCpuTypeFromContext(app: cdk.App): ec2.AmazonLinuxCpuType {
-  const raw = app.node.tryGetContext("amazonLinuxCpuType");
-  if (raw === "ARM_64") {
-    return ec2.AmazonLinuxCpuType.ARM_64;
+/** All tunables live in cdk.json `context`; this is the only place that reads them. */
+function readConfig(app: cdk.App) {
+  const ctx = (key: string) => app.node.tryGetContext(key);
+  const required = (key: string) => {
+    const value = ctx(key);
+    if (value === undefined || value === "") {
+      throw new Error(`Missing required cdk.json context value "${key}"`);
+    }
+    return value;
+  };
+
+  const instanceTypes = required("instanceTypes") as string[];
+  if (!Array.isArray(instanceTypes) || instanceTypes.length === 0) {
+    throw new Error(`cdk.json context "instanceTypes" must be a non-empty array`);
   }
-  return ec2.AmazonLinuxCpuType.X86_64;
+
+  return {
+    instanceTypes,
+    amazonLinuxCpuType:
+      ctx("amazonLinuxCpuType") === "X86_64"
+        ? ec2.AmazonLinuxCpuType.X86_64
+        : ec2.AmazonLinuxCpuType.ARM_64,
+    volumeSize: Number(ctx("volumeSize") ?? 30),
+    minecraftPort: Number(ctx("minecraftPort") ?? 25565),
+    hostedZoneName: required("hostedZoneName") as string,
+    serverSubdomain: (ctx("serverSubdomain") ?? "minecraft") as string,
+    idleShutdownTimer: Number(ctx("idleShutdownTimer") ?? 900),
+    javaVersion: String(ctx("javaVersion") ?? "21"),
+  };
 }
+
+const config = readConfig(app);
 
 const bucketStack = new MinecraftBucketStack(app, "MinecraftBucket", {
   env,
@@ -38,15 +63,7 @@ const serverStack = new MinecraftStack(app, "MinecraftServer", {
   env,
   description: "Modded Minecraft server - Spot EC2, S3 mods, Route53 DNS",
   bucket: bucketStack.bucket,
-
-  instanceTypes: app.node.tryGetContext("instanceTypes") || ["r5.large"],
-  volumeSize: Number(app.node.tryGetContext("volumeSize")) || 30,
-  minecraftPort: Number(app.node.tryGetContext("minecraftPort")) || 25565,
-  hostedZoneName: app.node.tryGetContext("hostedZoneName") || "broccoli-dependence.stichiboi.com",
-  serverSubdomain: app.node.tryGetContext("serverSubdomain") || "minecraft",
-  idleShutdownTimer: Number(app.node.tryGetContext("idleShutdownTimer")) || 900,
-  javaVersion: app.node.tryGetContext("javaVersion") || "21",
-  amazonLinuxCpuType: amazonLinuxCpuTypeFromContext(app),
+  ...config,
 });
 
 new MinecraftApiStack(app, "MinecraftApi", {
@@ -55,5 +72,5 @@ new MinecraftApiStack(app, "MinecraftApi", {
   discordPublicKey: process.env.DISCORD_PUBLIC_KEY ?? "",
   minecraftPort: serverStack.minecraftPort,
   serverFqdn: serverStack.fqdn,
-  instanceTypes: app.node.tryGetContext("instanceTypes") || ["r3.large"],
+  instanceTypes: config.instanceTypes,
 });
