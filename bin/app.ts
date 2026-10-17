@@ -49,6 +49,8 @@ function readConfig(app: cdk.App) {
     serverSubdomain: (ctx("serverSubdomain") ?? "minecraft") as string,
     idleShutdownTimer: Number(ctx("idleShutdownTimer") ?? 900),
     javaVersion: String(ctx("javaVersion") ?? "21"),
+    budgetEmail: (ctx("budgetEmail") || undefined) as string | undefined,
+    monthlyBudgetUsd: Number(ctx("monthlyBudgetUsd") ?? 15),
   };
 }
 

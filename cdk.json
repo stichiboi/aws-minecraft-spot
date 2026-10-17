@@ -23,6 +23,8 @@
     "hostedZoneName": "broccoli-dependence.stichiboi.com",
     "serverSubdomain": "minecraft",
     "idleShutdownTimer": 900,
-    "javaVersion": "21"
+    "javaVersion": "21",
+    "budgetEmail": "stichiboi@gmail.com",
+    "monthlyBudgetUsd": 20
   }
 }

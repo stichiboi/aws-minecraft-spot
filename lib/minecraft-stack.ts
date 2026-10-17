@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as budgets from "aws-cdk-lib/aws-budgets";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
@@ -29,6 +30,9 @@ export interface MinecraftStackProps extends cdk.StackProps {
   javaVersion: string;
   /** Amazon Linux 2023 AMI CPU. Must match `instanceTypes` arch (e.g. ARM_64 for m7g/m6g Graviton). Default: X86_64. */
   amazonLinuxCpuType: ec2.AmazonLinuxCpuType;
+  /** Email for the monthly AWS Budgets alert. No budget is created when unset. */
+  budgetEmail?: string;
+  monthlyBudgetUsd: number;
 }
 
 export class MinecraftStack extends cdk.Stack {
@@ -256,6 +260,41 @@ export class MinecraftStack extends cdk.Stack {
     // every boot with the real public IP. Keeping it in CDK would reset it to
     // 127.0.0.1 on every `cdk deploy`. On `cdk destroy` you must delete the
     // A record manually from the hosted zone.
+
+    // ── Monthly cost alert ──────────────────────────────────────────
+    if (props.budgetEmail) {
+      const subscribers = [
+        { subscriptionType: "EMAIL", address: props.budgetEmail },
+      ];
+      new budgets.CfnBudget(this, "MonthlyBudget", {
+        budget: {
+          budgetName: "minecraft-monthly",
+          budgetType: "COST",
+          timeUnit: "MONTHLY",
+          budgetLimit: { amount: props.monthlyBudgetUsd, unit: "USD" },
+        },
+        notificationsWithSubscribers: [
+          {
+            notification: {
+              notificationType: "ACTUAL",
+              comparisonOperator: "GREATER_THAN",
+              threshold: 80,
+              thresholdType: "PERCENTAGE",
+            },
+            subscribers,
+          },
+          {
+            notification: {
+              notificationType: "FORECASTED",
+              comparisonOperator: "GREATER_THAN",
+              threshold: 100,
+              thresholdType: "PERCENTAGE",
+            },
+            subscribers,
+          },
+        ],
+      });
+    }
 
     // ── Outputs ─────────────────────────────────────────────────────
     new cdk.CfnOutput(this, "ServerAddress", {
