@@ -7,6 +7,13 @@ import * as route53 from "aws-cdk-lib/aws-route53";
 import * as cr from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { buildUserDataBundle } from "./build-user-data";
+import {
+  DATA_VOLUME_NAME_TAG,
+  INSTANCE_NAME_TAG,
+  LAUNCH_TEMPLATE_NAME,
+  SERVER_MANAGEMENT_FUNCTION_NAME,
+  SSM_CONFIG_PATH,
+} from "./constants";
 
 export interface MinecraftStackProps extends cdk.StackProps {
   bucket: s3.IBucket;
@@ -86,7 +93,7 @@ export class MinecraftStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    cdk.Tags.of(dataVolume).add("Name", "MinecraftData");
+    cdk.Tags.of(dataVolume).add("Name", DATA_VOLUME_NAME_TAG);
 
     // Force-detach the EBS volume on stack deletion so CloudFormation can delete
     // it even if a spot-relaunched instance (unknown to CFN) has it attached.
@@ -149,7 +156,7 @@ export class MinecraftStack extends cdk.Stack {
     // Per-boot script reads these at runtime instead of relying on values
     // baked into user-data. Decouples config from CloudFormation user-data
     // and eliminates the Fn::Sub escaping that was required previously.
-    const configPath = "/minecraft/config";
+    const configPath = SSM_CONFIG_PATH;
     const configEntries: [string, string][] = [
       ["bucket-name",     bucket.bucketName],
       ["volume-id",       dataVolume.volumeId],
@@ -182,7 +189,7 @@ export class MinecraftStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ["lambda:InvokeFunction"],
         resources: [
-          `arn:aws:lambda:${this.region}:${this.account}:function:minecraft-server-management`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:${SERVER_MANAGEMENT_FUNCTION_NAME}`,
         ],
       })
     );
@@ -216,7 +223,7 @@ export class MinecraftStack extends cdk.Stack {
           }),
         },
       ],
-      launchTemplateName: "MinecraftServer",
+      launchTemplateName: LAUNCH_TEMPLATE_NAME,
     });
 
     // ── EC2 Instance ────────────────────────────────────────────────
@@ -238,7 +245,7 @@ export class MinecraftStack extends cdk.Stack {
       [
         {
           ResourceType: "instance",
-          Tags: [{ Key: "Name", Value: "MinecraftServer" }],
+          Tags: [{ Key: "Name", Value: INSTANCE_NAME_TAG }],
         },
       ]
     );

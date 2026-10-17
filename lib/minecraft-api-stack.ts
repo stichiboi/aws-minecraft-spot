@@ -6,6 +6,11 @@ import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Construct } from "constructs";
+import {
+  INSTANCE_NAME_TAG,
+  LAUNCH_TEMPLATE_NAME,
+  SERVER_MANAGEMENT_FUNCTION_NAME,
+} from "./constants";
 
 export interface MinecraftApiStackProps extends cdk.StackProps {
   discordPublicKey: string;
@@ -60,9 +65,9 @@ export class MinecraftApiStack extends cdk.Stack {
     });
 
     const ec2Environment = {
-      INSTANCE_TAG: "MinecraftServer",
+      INSTANCE_TAG: INSTANCE_NAME_TAG,
       SUBNET_FILTER: "MinecraftServer/Vpc/PublicSubnet1",
-      LAUNCH_TEMPLATE_NAME: "MinecraftServer",
+      LAUNCH_TEMPLATE_NAME,
       MINECRAFT_PORT: String(props.minecraftPort),
       SERVER_FQDN: props.serverFqdn,
       INSTANCE_TYPES: JSON.stringify(props.instanceTypes),
@@ -70,13 +75,13 @@ export class MinecraftApiStack extends cdk.Stack {
 
     // ── Server Management Lambda (EC2 start/stop/status — directly invocable) ──
     const serverManagementLogGroup = new logs.LogGroup(this, "ServerManagementLogGroup", {
-      logGroupName: "/aws/lambda/minecraft-server-management",
+      logGroupName: `/aws/lambda/${SERVER_MANAGEMENT_FUNCTION_NAME}`,
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     const serverManagement = new NodejsFunction(this, "ServerManagement", {
-      functionName: "minecraft-server-management",
+      functionName: SERVER_MANAGEMENT_FUNCTION_NAME,
       entry: "lib/lambda/server-management.ts",
       runtime: Runtime.NODEJS_20_X,
       timeout: cdk.Duration.seconds(120),
