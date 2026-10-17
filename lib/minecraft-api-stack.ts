@@ -35,6 +35,10 @@ export class MinecraftApiStack extends cdk.Stack {
       `${SSM_CONFIG_PATH}/subnet-id`
     );
 
+    // Must exceed GRACEFUL_SHUTDOWN_WAIT_MS (lib/lambda/config.ts) plus the
+    // EC2 calls around it, or /stop is killed before the instance is terminated.
+    const managementTimeout = cdk.Duration.seconds(300);
+
     const workerLogGroup = new logs.LogGroup(this, "WorkerLogGroup", {
       logGroupName: "/aws/lambda/minecraft-discord-worker",
       retention: logs.RetentionDays.ONE_WEEK,
@@ -101,7 +105,7 @@ export class MinecraftApiStack extends cdk.Stack {
       functionName: SERVER_MANAGEMENT_FUNCTION_NAME,
       entry: "lib/lambda/server-management.ts",
       runtime: Runtime.NODEJS_20_X,
-      timeout: cdk.Duration.seconds(120),
+      timeout: managementTimeout,
       logGroup: serverManagementLogGroup,
       environment: ec2Environment,
     });
@@ -116,7 +120,7 @@ export class MinecraftApiStack extends cdk.Stack {
       functionName: "minecraft-discord-worker",
       entry: "lib/lambda/discord-worker.ts",
       runtime: Runtime.NODEJS_20_X,
-      timeout: cdk.Duration.seconds(120),
+      timeout: managementTimeout,
       logGroup: workerLogGroup,
       environment: {
         DISCORD_BOT_TOKEN: props.discordBotToken,
