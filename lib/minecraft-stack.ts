@@ -166,8 +166,9 @@ export class MinecraftStack extends cdk.Stack {
     const configEntries: [string, string][] = [
       ["bucket-name",     bucket.bucketName],
       ["volume-id",       dataVolume.volumeId],
-      ["subnet-id",       vpc.publicSubnets[0].subnetId],
-      ["hosted-zone-id",  hostedZone.hostedZoneId],
+      ["subnet-id",           vpc.publicSubnets[0].subnetId],
+      ["instance-role-arn",   role.roleArn],
+      ["hosted-zone-id",      hostedZone.hostedZoneId],
       ["fqdn",            fqdn],
       ["port",            String(props.minecraftPort)],
       ["shutdown-timer",  String(props.idleShutdownTimer)],

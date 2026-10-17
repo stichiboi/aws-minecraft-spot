@@ -32,6 +32,10 @@ export class MinecraftApiStack extends cdk.Stack {
       this,
       `${SSM_CONFIG_PATH}/subnet-id`
     );
+    const instanceRoleArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      `${SSM_CONFIG_PATH}/instance-role-arn`
+    );
 
     // Must exceed GRACEFUL_SHUTDOWN_WAIT_MS (lib/lambda/config.ts) plus the
     // EC2 calls around it, or /stop is killed before the instance is terminated.
@@ -49,38 +53,62 @@ export class MinecraftApiStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const ec2Policy = new iam.PolicyStatement({
-      actions: [
-        "ec2:DescribeInstances",
-        "ec2:DescribeInstanceStatus",
-        "ec2:DescribeVolumes",
-        "ec2:RunInstances",
-        "ec2:CreateFleet",
-        "ec2:TerminateInstances",
-        "ec2:CancelSpotInstanceRequests",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeSpotInstanceRequests",
-        "ec2:CreateTags",
-        "iam:PassRole",
-      ],
-      resources: ["*"],
-    });
+    const instanceArns = `arn:aws:ec2:${this.region}:${this.account}:instance/*`;
+    const taggedServer = {
+      StringEquals: { "aws:ResourceTag/Name": INSTANCE_NAME_TAG },
+    };
 
-    const cloudwatchPolicy = new iam.PolicyStatement({
-      actions: ["cloudwatch:GetMetricStatistics"],
-      resources: ["*"],
-    });
-
-    const ssmRunPolicy = new iam.PolicyStatement({
-      actions: ["ssm:SendCommand", "ssm:GetCommandInvocation"],
-      resources: ["*"],
-    });
-
-    // The launch template's AMI is a resolve:ssm: reference, resolved with the caller's permissions.
-    const amiParameterPolicy = new iam.PolicyStatement({
-      actions: ["ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:*:parameter/aws/service/ami-amazon-linux-latest/*`],
-    });
+    const managementPolicies = [
+      // Describe* has no resource-level permissions; CreateFleet/RunInstances
+      // touch many resource types (subnet, SG, image, volume, ENI, ...).
+      new iam.PolicyStatement({
+        actions: [
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeVolumes",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSpotInstanceRequests",
+          "ec2:RunInstances",
+          "ec2:CreateFleet",
+          "ec2:CreateTags",
+          "ec2:CancelSpotInstanceRequests",
+        ],
+        resources: ["*"],
+      }),
+      new iam.PolicyStatement({
+        actions: ["ec2:TerminateInstances"],
+        resources: [instanceArns],
+        conditions: taggedServer,
+      }),
+      new iam.PolicyStatement({
+        actions: ["iam:PassRole"],
+        resources: [instanceRoleArn],
+      }),
+      // The launch template's AMI is a resolve:ssm: reference, resolved with the caller's permissions.
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameters"],
+        resources: [`arn:aws:ssm:${this.region}:*:parameter/aws/service/ami-amazon-linux-latest/*`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["cloudwatch:GetMetricStatistics"],
+        resources: ["*"],
+      }),
+      new iam.PolicyStatement({
+        actions: ["ssm:SendCommand"],
+        resources: [`arn:aws:ssm:${this.region}::document/AWS-RunShellScript`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["ssm:SendCommand"],
+        resources: [instanceArns],
+        conditions: {
+          StringEquals: { "ssm:resourceTag/Name": INSTANCE_NAME_TAG },
+        },
+      }),
+      new iam.PolicyStatement({
+        actions: ["ssm:GetCommandInvocation"],
+        resources: ["*"],
+      }),
+    ];
 
     const ec2Environment = {
       INSTANCE_TAG: INSTANCE_NAME_TAG,
@@ -108,11 +136,6 @@ export class MinecraftApiStack extends cdk.Stack {
       environment: ec2Environment,
     });
 
-    serverManagement.addToRolePolicy(ec2Policy);
-    serverManagement.addToRolePolicy(cloudwatchPolicy);
-    serverManagement.addToRolePolicy(ssmRunPolicy);
-    serverManagement.addToRolePolicy(amiParameterPolicy);
-
     // ── Worker Lambda (calls server-management logic + posts Discord follow-up) ──
     // Follow-ups authenticate with the interaction token, so no bot token here.
     const worker = new NodejsFunction(this, "DiscordWorker", {
@@ -124,10 +147,10 @@ export class MinecraftApiStack extends cdk.Stack {
       environment: ec2Environment,
     });
 
-    worker.addToRolePolicy(ec2Policy);
-    worker.addToRolePolicy(cloudwatchPolicy);
-    worker.addToRolePolicy(ssmRunPolicy);
-    worker.addToRolePolicy(amiParameterPolicy);
+    for (const statement of managementPolicies) {
+      serverManagement.addToRolePolicy(statement);
+      worker.addToRolePolicy(statement);
+    }
 
     // ── Handler Lambda (signature verification + command routing) ──────
     const handler = new NodejsFunction(this, "DiscordHandler", {
