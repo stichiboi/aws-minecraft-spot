@@ -28,6 +28,8 @@ DISCORD_BOT_TOKEN=<from Bot section>
 DISCORD_APPLICATION_ID=<from General Information>
 ```
 
+`DISCORD_PUBLIC_KEY` is deployed to the handler Lambda (`task deploy-api` refuses to run without it). `DISCORD_BOT_TOKEN` and `DISCORD_APPLICATION_ID` are only used locally by `task register-discord-commands` and are never deployed.
+
 ### 3. Deploy the stack
 
 ```bash
@@ -63,4 +65,14 @@ The bot only responds to slash command interactions via the webhook URL. It neve
 In any channel where the bot has access:
 - `/status` — shows current server state
 - `/start` — launches the EC2 instance
-- `/stop` — cancels the spot request and terminates the instance
+- `/stop` — saves the world, cancels the spot request and terminates the instance
+
+### 8. (Optional) Channel notifications
+
+Slash-command replies only cover the moment you run the command. To also get a message in a channel when the server is ready, idle-stops, gets a spot reclaim notice, or fails to boot, create a channel webhook (channel → **Edit Channel** → **Integrations** → **Webhooks** → **New Webhook** → **Copy Webhook URL**) and store it:
+
+```bash
+task set-discord-webhook -- 'https://discord.com/api/webhooks/...'
+```
+
+This is independent from the bot application above. The URL is a secret (anyone with it can post to the channel); it is stored as an SSM SecureString, not in `.env`.

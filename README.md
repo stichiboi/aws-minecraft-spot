@@ -29,12 +29,13 @@ Run `task` to list all available tasks.
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `task rcon`         | Runs an `rcon` command on the minecraft server. Use this to add a player to the operator list `task rcon -- "op Stichiboi"` |
 | `task status`       | Instance state, public IP, DNS name, S3 bucket                                                                              |
-| `task start-server` | Start a stopped instance (per-boot logic runs on boot)                                                                      |
-| `task stop-server`  | Stop the instance; **data EBS stays attached until next start**                                                             |
+| `task start-server` | Launch a new spot instance via EC2 Fleet; it attaches the data volume and starts Minecraft on boot                         |
+| `task stop-server`  | Save the world, stop Minecraft and terminate the instance; the data volume is detached and kept                            |
 | `task ssm`          | runs an SSM command on the EC2 instance                                                                                     |
 | `task upload-mods`  | Sync local `resources/` (mods, config, server settings) to S3                                                               |
-| `task deploy`       | Full deploy: bucket → upload → server → status                                                                              |
-| `task destroy`      | `cdk destroy` — **S3 bucket and data EBS volume are retained** (RemovalPolicy RETAIN)                                       |
+| `task deploy`       | Full deploy: bucket → upload → server → API → status                                                                        |
+| `task set-discord-webhook -- <url>` | Post server lifecycle events to a Discord channel (see [Notifications](#notifications))          |
+| `task destroy`      | Stops the server and destroys all stacks — **the S3 bucket is deleted; the data volume leaves a final EBS snapshot**       |
 
 ## The `resources/` directory
 
@@ -108,7 +109,7 @@ This is pushed to SSM Parameter Store on deploy. The per-boot script reads it fr
 
 ### Instance types (EC2 Fleet)
 
-The server uses an **EC2 Fleet** (`instant` type, `capacity-optimized` spot allocation) to launch from a prioritized list of instance types. This reduces "no spot capacity" failures by letting AWS pick whichever type has availability.
+The server uses an **EC2 Fleet** (`instant` type, `price-capacity-optimized` spot allocation) to launch from a list of instance types. This reduces "no spot capacity" failures and interruptions by letting AWS pick the cheapest type among those with deep spare capacity.
 
 Edit `instanceTypes` in `cdk.json`:
 
@@ -123,28 +124,22 @@ Edit `instanceTypes` in `cdk.json`:
 
 All types in the list **must share the same CPU architecture** — the AMI is built for one arch only. For Graviton (ARM) types (`m7g.*`, `m6g.*`, `c7g.*`, `r7g.*`), set `"amazonLinuxCpuType": "ARM_64"`. For x86 types, use `"X86_64"`.
 
-After editing, run `task deploy SKIP_UPLOADS=true` to update both the launch template (used as the fleet's base) and the Lambda environment variable. The Lambda reads the list at runtime and passes all types as fleet overrides — AWS picks the one with the most available spot capacity.
+After editing, run `task deploy SKIP_UPLOADS=true` to update both the launch template (used as the fleet's base) and the Lambda environment variable. The Lambda reads the list at runtime and passes all types as fleet overrides.
+
+The launch template resolves the latest Amazon Linux 2023 AMI at launch time, so every start boots a patched OS without a redeploy.
 
 ### JVM memory and GC settings
 
-Edit `resources/server/jvm-args.txt` — one flag per line:
+The heap is sized automatically: `start.sh` passes `-Xms`/`-Xmx` set to **70% of the instance's RAM**, so it scales with whichever instance type the fleet picks. Override the percentage with a `HEAP_PERCENT` environment variable (systemd drop-in via `systemctl edit minecraft`), or pin a fixed heap by adding `-Xmx` (and `-Xms`) to `resources/server/jvm-args.txt` — an explicit `-Xmx` there disables auto-sizing.
+
+Put GC and other flags in `resources/server/jvm-args.txt`, one per line:
 
 ```
--Xms1G
--Xmx2500M
 -XX:+UseG1GC
 ...
 ```
 
-**`-Xms`** is the initial heap size (allocated immediately on start). **`-Xmx`** is the maximum. A good rule of thumb: leave at least 1–1.5GB free for the OS and JVM non-heap overhead.
-
-| Instance  | RAM   | Recommended `-Xmx` |
-| --------- | ----- | ------------------ |
-| t3.medium | 4 GB  | `2500M`            |
-| r5.large  | 16 GB | `12G`              |
-| r5.xlarge | 32 GB | `26G`              |
-
-To apply changes to a running instance: `task sync-mods` (uploads to S3 and pushes to the instance via SSM, no SSH or reboot needed).
+To apply changes to a running instance: `task sync-server` (uploads to S3 and pushes to the instance via SSM, then restarts Minecraft).
 
 ## RCON
 
@@ -155,13 +150,30 @@ task rcon -- 'list'         # show online players
 task rcon -- 'op [username]'  # make a player an operator
 ```
 
-RCON runs on `localhost:25575` inside the instance — the security group never opens this port. The password (`password`) is not a real secret; the only path to RCON is through SSM, which requires AWS credentials.
+RCON runs on `localhost:25575` inside the instance — the security group never opens this port. The password (`password`) is not a real secret; the only path to RCON is through SSM, which requires AWS credentials. Commands go through `rcon_query.py`, which the instance pulls from S3 `tools/` at boot.
 
-The `rcon` binary ([gorcon/rcon-cli](https://github.com/gorcon/rcon-cli)) is downloaded to the instance on first use.
+If RCON is disabled in `server.properties`, the idle monitor falls back to counting established TCP connections on the game port.
+
+
+## Budget
+
+**Monthly budget alert** — set `budgetEmail` (and optionally `monthlyBudgetUsd`, default 15) in `cdk.json` and run `task deploy-instance`. AWS Budgets emails you at 80% of actual spend and when the forecast exceeds 100%. Leave `budgetEmail` empty to skip it.
 
 ## Discord bot
 
 Slash commands (`/start`, `/stop`, `/status`) that work without AWS credentials. See [discord/README.md](discord/README.md) for setup.
+
+### Notifications
+
+**Discord channel notifications** — the instance posts to a Discord channel webhook when the server is ready, idle-stops, stops unexpectedly, receives a spot reclaim notice, or fails to boot. Create a webhook in Discord (channel → *Edit Channel* → *Integrations* → *Webhooks*), then:
+
+```bash
+task set-discord-webhook -- 'https://discord.com/api/webhooks/...'
+task set-discord-webhook -- --delete   # turn notifications off
+```
+
+The URL is stored as an SSM SecureString (`/minecraft/secrets/discord-webhook-url`) and read on each event, so no redeploy is needed. Without it, notifications are silently skipped.
+
 
 ## Adding a new bot (e.g. Telegram)
 
@@ -176,8 +188,8 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 
 ## Architecture
 
-- **EC2 Fleet** (spot, `capacity-optimized`) — the Lambda creates an `instant` fleet with multiple instance type overrides from `cdk.json`. AWS picks the type with the most spot capacity. Instances are terminated on stop; the EBS data volume is reattached on next boot.
-- **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. Replacing or resizing the instance in CDK does **not** create a new data volume; the same volume is attached each boot.
+- **EC2 Fleet** (spot, `price-capacity-optimized`) — the Lambda creates an `instant` fleet with multiple instance type overrides from `cdk.json`. Instances exist only while the server is running: they are terminated on stop, and the EBS data volume is reattached on next boot. CloudFormation manages the launch template, not an instance.
+- **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. If the volume is ever replaced or the stack destroyed, CloudFormation takes a final snapshot first (RemovalPolicy SNAPSHOT).
 - **Small root volume** (8GB gp3) on the instance for the OS only.
 - **S3** - `server/`, `mods/`, `mods-config/`, `server-bin/`, `tools/`; `upload-mods.sh` pushes local `resources/` into the bucket.
 - **Route53** - A record updated on **every boot** by the per-boot script (no Elastic IP).
@@ -188,12 +200,15 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 
 Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** behavior is shell:
 
-| File               | When it runs                                    | Role                                                                                                                                                                                                                                      |
-| ------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/user-data.sh` | First boot only (cloud-init)                    | Installs jq/nvme-cli, creates `minecraft` user, writes systemd unit, decodes and installs the per-boot script, runs it once.                                                                                                              |
-| `lib/per-boot.sh`  | Every boot (`/var/lib/cloud/scripts/per-boot/`) | Applies security patches (`dnf update --security`), attaches & mounts the data volume, updates DNS, syncs S3 server config/mods, installs Java (version from SSM) and server if needed, installs `start.sh` from S3, `systemctl restart minecraft`. |
+| File                    | When it runs                         | Role                                                                                                                                                                                       |
+| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/user-data.sh`      | First boot (cloud-init user-data)    | Installs `boot-bootstrap.sh` as a cloud-init per-boot hook and runs it once.                                                                                                              |
+| `lib/boot-bootstrap.sh` | Every boot (embedded in user-data)   | Downloads `per-boot.sh` from S3 `tools/` and runs it. Terminates the instance if it can't.                                                                                                 |
+| `lib/per-boot.sh`       | Every boot (fetched from S3)         | Reads config from SSM, installs Java, pulls the other `tools/` scripts, attaches & mounts the data volume, updates DNS, syncs server files/mods from S3, writes the systemd units, starts Minecraft. |
 
-At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}`, etc., and embeds the per-boot script (base64) into user-data.
+Only the small bootstrap is baked into the launch template. Everything else lives in S3 `tools/` (uploaded by `task upload-server-config`, which `task deploy-instance` runs), so script changes apply on the next start without replacing the launch template.
+
+If `per-boot.sh` fails, it uploads its log to `s3://BUCKET/logs/boot-failures/`, posts a Discord notification (if configured) and terminates the instance, so a broken boot never keeps a spot instance running.
 
 ## Cost (~eu-central-1)
 
@@ -205,4 +220,4 @@ At synth time, CDK reads both files, substitutes `${BUCKET_NAME}`, `${VOLUME_ID}
 - [x] Backup world data on shutdown / on a schedule — store in S3 cold storage. A combination of [Backup Mods](https://modrinth.com/mod/simple-backups) and S3 sync would be ideal.
 - [x] Lambda commands to start the server
 - [x] Automatic server shutdown when no players are online
-- [ ] On instance start / stop event, trigger lambda to update bot's commands: currently, sending a /start command will just tell you "Instance is terminating"; it would be nice to have an update once the instance is actually terminated "Instance was terminated at 18:04:33". Same for starting.
+- [x] Lifecycle notifications (ready / idle stop / spot reclaim / boot failure) posted to a Discord channel webhook

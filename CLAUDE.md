@@ -1,44 +1,51 @@
 # aws-maincraift
 
-Minecraft server on AWS Spot EC2 (us-east-1). CDK (TypeScript) for infra; bash scripts for EC2 boot; shell scripts for dev-machine operations. Use `task` (Taskfile.yml) to run everything.
+Minecraft server on AWS Spot EC2 (eu-central-1). CDK (TypeScript) for infra; bash scripts for EC2 boot; shell scripts for dev-machine operations. Use `task` (Taskfile.yml) to run everything.
 
 ## Instance Lifecycle (EC2 Fleet)
 
-The server uses **EC2 Fleet** (`instant` type, `capacity-optimized`) instead of `RunInstances`. The Lambda reads `INSTANCE_TYPES` (JSON array from `cdk.json` context `instanceTypes`) and passes all types as fleet overrides — AWS picks the one with the most spot capacity.
+The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) instead of `RunInstances`. The Lambda reads `INSTANCE_TYPES` (JSON array from `cdk.json` context `instanceTypes`) and passes all types as fleet overrides. CloudFormation manages only the launch template — there is no stack-managed instance; instances exist only while the server runs.
 
 - All types must share the same CPU arch (matching `amazonLinuxCpuType` in `cdk.json`).
-- The launch template sets the first type as a default (for the CloudFormation-managed instance); the fleet overrides it at runtime.
-- On start: Lambda checks volume is `available` → creates fleet → new instance boots → `per-boot.sh` attaches EBS volume by ID (from SSM) → mounts → starts Minecraft.
+- The launch template sets the first type as a default; the fleet overrides it at runtime. Its AMI is `resolve:ssm:` (latest AL2023 at launch).
+- On start: Lambda checks volume is `available` → creates fleet → new instance boots → `boot-bootstrap.sh` (the only script in user-data) fetches `per-boot.sh` from S3 `tools/` → attaches EBS volume by ID (from SSM) → mounts → starts Minecraft. Any boot failure terminates the instance (log uploaded to `s3://BUCKET/logs/boot-failures/`).
+- Boot scripts other than the bootstrap live in S3 `tools/` (uploaded by `upload-server-config.sh`), so editing them doesn't touch the launch template.
 - On stop: Lambda runs graceful-shutdown via SSM → cancels spot request → terminates instance → volume becomes `available`.
 
 ## File Map
 
 | Path | Purpose |
 |------|---------|
-| `lib/minecraft-stack.ts` | Main CDK stack: EC2, networking, Route53 DNS |
+| `lib/constants.ts` | Shared names: instance/volume Name tags, launch template name, Lambda name, SSM paths |
+| `lib/minecraft-stack.ts` | Main CDK stack: launch template, data volume, IAM, SSM config params, budget alert |
 | `lib/minecraft-bucket-stack.ts` | CDK stack: S3 bucket for mods |
-| `lib/user-data.sh` | EC2 init script (runs once on first boot) |
-| `lib/per-boot.sh` | EC2 boot script (runs on every start) |
-| `lib/start.sh` | Unified server launch script (`java @jvm-args.txt`, uploaded to S3 `tools/`) |
-| `lib/monitor.sh` | EC2 idle-shutdown monitor: polls RCON, invokes stop Lambda after inactivity |
-| `lib/graceful-shutdown.sh` | EC2 graceful Minecraft stop (RCON save-all/stop, systemctl fallback) — invoked by Lambda via SSM and by spot watcher |
-| `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS, runs graceful-shutdown.sh on notice |
+| `lib/user-data.sh` | EC2 user-data: installs the boot bootstrap as a cloud-init per-boot hook |
+| `lib/boot-bootstrap.sh` | Embedded per-boot hook: downloads `tools/per-boot.sh` from S3 and runs it; self-terminates on failure |
+| `lib/per-boot.sh` | EC2 boot script (every start, fetched from S3 `tools/`): Java, volume attach/mount, DNS, S3 sync, systemd units; on failure uploads log, notifies, terminates |
+| `lib/start.sh` | Unified server launch script (`java @jvm-args.txt`, heap = `HEAP_PERCENT`% of RAM unless jvm-args.txt sets `-Xmx`; uploaded to S3 `tools/`) |
+| `lib/monitor.sh` | EC2 idle-shutdown monitor: counts players via RCON (TCP connection fallback), posts ready/idle/crash notifications, invokes stop Lambda after inactivity |
+| `lib/graceful-shutdown.sh` | EC2 graceful Minecraft stop (RCON save-all/stop, systemctl fallback) — invoked by Lambda via SSM and by spot watcher; leaves a marker so the monitor doesn't treat it as a crash |
+| `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS every 5 s, warns players, notifies, runs graceful-shutdown.sh on notice |
+| `lib/notify.sh` | EC2 Discord notifier: posts to the webhook in SSM `/minecraft/secrets/discord-webhook-url`; no-op if unset, never fails the caller |
 | `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
 | `lib/status_query.py` | EC2 status collector: RCON /list, journal errors/warnings, RAM, disk — outputs JSON (uploaded to S3, pulled at boot) |
-| `lib/build-user-data.ts` | Bundles user-data.sh + per-boot.sh + monitor.sh into CDK user-data via heredocs |
+| `lib/build-user-data.ts` | Embeds boot-bootstrap.sh into user-data.sh via heredoc (keeps user-data under 16 KiB) |
 | `scripts/upload-server.sh` | Download MC server JAR + upload server files (JAR, config, rcon) to S3 |
-| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, and `tools/` boot scripts to S3 (also run by deploy-instance) |
+| `scripts/upload-server-config.sh` | Lightweight: upload server.properties, jvm-args.txt, and every `lib/*.sh`/`*.py` boot script (except user-data/bootstrap) to S3 `tools/` (also run by deploy-instance) |
 | `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |
 | `scripts/sync-server.sh` | Sync server files from S3 to running instance via SSM (no restart) |
 | `scripts/sync-mods.sh` | Sync mods + mod configs from S3 to running instance via SSM (no restart) |
-| `scripts/restart-server.sh` | Restart minecraft.service on instance via SSM (shared by sync tasks) |
+| `scripts/restart-server.sh` | Restart minecraft.service on instance via SSM, pausing the idle monitor (shared by sync tasks) |
+| `scripts/lib/ssm-run.sh` | Sourced helper: `ssm_run` (send + poll + print output) and `json_array` — used by every SSM script |
+| `scripts/set-discord-webhook.sh` | Store/delete the Discord notification webhook URL as an SSM SecureString |
 | `scripts/start-server.sh` | Invoke `minecraft-server-management` Lambda (start) |
 | `scripts/stop-server.sh` | Invoke `minecraft-server-management` Lambda (stop) |
 | `scripts/status.sh` | Invoke `minecraft-server-management` Lambda (status) + show bucket |
 | `scripts/ssm.sh` | Run a shell command on the instance via SSM and print output |
 | `scripts/reset-world.sh` | Delete world folders on running instance via SSM and restart |
 | `server-paths.txt` | Gitignored: extra server paths for world reset and backup (relative to server dir) |
-| `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks |
+| `scripts/deploy-*.sh` | CDK deploy for bucket/instance/api stacks (instance before api: api reads SSM params the instance stack writes) |
+| `scripts/destroy.sh` | Stop the server, then destroy all stacks (data volume leaves a final snapshot) |
 | `server-config/config.json` | Server type, MC version, loader version — used locally by upload-server.sh |
 | `resources/mods/` | Gitignored: Minecraft mod JARs (uploaded to S3) |
 | `resources/mods-config/` | Gitignored: mod config files synced to S3 and deployed to server/config/ on the instance |
