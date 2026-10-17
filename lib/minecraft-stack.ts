@@ -160,13 +160,13 @@ export class MinecraftStack extends cdk.Stack {
     );
 
     // ── SSM Config Parameters ────────────────────────────────────────
-    // Per-boot script reads these at runtime instead of relying on values
-    // baked into user-data. Decouples config from CloudFormation user-data
-    // and eliminates the Fn::Sub escaping that was required previously.
+    // Boot scripts read these at runtime. The API stack resolves subnet-id at
+    // deploy time instead of searching for a subnet by name.
     const configPath = SSM_CONFIG_PATH;
     const configEntries: [string, string][] = [
       ["bucket-name",     bucket.bucketName],
       ["volume-id",       dataVolume.volumeId],
+      ["subnet-id",       vpc.publicSubnets[0].subnetId],
       ["hosted-zone-id",  hostedZone.hostedZoneId],
       ["fqdn",            fqdn],
       ["port",            String(props.minecraftPort)],

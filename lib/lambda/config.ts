@@ -7,14 +7,13 @@ export const cw = new CloudWatchClient({});
 export const ssm = new SSMClient({});
 
 export const INSTANCE_TAG = process.env.INSTANCE_TAG ?? "MinecraftServer";
-export const SUBNET_FILTER =
-  process.env.SUBNET_FILTER ?? "MinecraftServer/Vpc/PublicSubnet1";
+export const SUBNET_ID = process.env.SUBNET_ID ?? "";
 export const LAUNCH_TEMPLATE_NAME =
   process.env.LAUNCH_TEMPLATE_NAME ?? "MinecraftServer";
 export const MINECRAFT_PORT = Number(process.env.MINECRAFT_PORT ?? "25565");
 export const SERVER_FQDN = process.env.SERVER_FQDN ?? "";
 export const INSTANCE_TYPES: string[] = JSON.parse(
-  process.env.INSTANCE_TYPES ?? '["r3.large"]'
+  process.env.INSTANCE_TYPES ?? "[]"
 );
 export const DATA_VOLUME_TAG = process.env.DATA_VOLUME_TAG ?? "MinecraftData";
 export const GRACEFUL_SHUTDOWN_SCRIPT = "/opt/minecraft/graceful-shutdown.sh";

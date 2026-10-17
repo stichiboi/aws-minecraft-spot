@@ -85,6 +85,14 @@ describe("start-server", () => {
       port: 25565,
     });
     expect(mockEc2Send).toHaveBeenCalledWith(expect.any(CreateFleetCommand));
+    const fleet = mockEc2Send.mock.calls
+      .map(([command]) => command)
+      .find((command) => command instanceof CreateFleetCommand) as CreateFleetCommand;
+    expect(fleet.input.SpotOptions?.AllocationStrategy).toBe("price-capacity-optimized");
+    const subnetLookup = mockEc2Send.mock.calls
+      .map(([command]) => command)
+      .find((command) => command instanceof DescribeSubnetsCommand) as DescribeSubnetsCommand;
+    expect(subnetLookup.input.SubnetIds).toEqual(["subnet-1"]);
   });
 
   it("returns no_capacity when the fleet does not launch an instance", async () => {
@@ -143,8 +151,6 @@ describe("start-server", () => {
     });
     getDataVolumeState.mockResolvedValue(null);
 
-    await expect(startServer()).rejects.toThrow(
-      "Could not find subnet tagged Name=MinecraftServer/Vpc/PublicSubnet1"
-    );
+    await expect(startServer()).rejects.toThrow("Could not find subnet subnet-1");
   });
 });

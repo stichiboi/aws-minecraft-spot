@@ -7,7 +7,7 @@ import type { StartResult } from "./types";
 import {
   ec2,
   INSTANCE_TAG,
-  SUBNET_FILTER,
+  SUBNET_ID,
   LAUNCH_TEMPLATE_NAME,
   MINECRAFT_PORT,
   SERVER_FQDN,
@@ -56,19 +56,20 @@ export async function startServer(instanceType?: string): Promise<StartResult> {
     return { status: "volume_in_use", volumeId: vol.volumeId };
   }
 
+  if (!SUBNET_ID) {
+    throw new Error("SUBNET_ID is not configured");
+  }
   console.log("startServer: no existing instance, looking up subnet", {
-    filter: SUBNET_FILTER,
+    subnetId: SUBNET_ID,
   });
   const subnets = await ec2.send(
-    new DescribeSubnetsCommand({
-      Filters: [{ Name: "tag:Name", Values: [SUBNET_FILTER] }],
-    })
+    new DescribeSubnetsCommand({ SubnetIds: [SUBNET_ID] })
   );
 
   const subnet = subnets.Subnets?.[0];
   const subnetId = subnet?.SubnetId;
   if (!subnetId) {
-    throw new Error(`Could not find subnet tagged Name=${SUBNET_FILTER}`);
+    throw new Error(`Could not find subnet ${SUBNET_ID}`);
   }
   console.log("startServer: found subnet", { subnetId, az: subnet.AvailabilityZone });
 
@@ -86,7 +87,7 @@ export async function startServer(instanceType?: string): Promise<StartResult> {
         DefaultTargetCapacityType: "spot",
       },
       SpotOptions: {
-        AllocationStrategy: "capacity-optimized",
+        AllocationStrategy: "price-capacity-optimized",
       },
       LaunchTemplateConfigs: [
         {

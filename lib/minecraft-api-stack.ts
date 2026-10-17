@@ -1,15 +1,18 @@
 import * as cdk from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Construct } from "constructs";
 import {
+  DATA_VOLUME_NAME_TAG,
   INSTANCE_NAME_TAG,
   LAUNCH_TEMPLATE_NAME,
   SERVER_MANAGEMENT_FUNCTION_NAME,
+  SSM_CONFIG_PATH,
 } from "./constants";
 
 export interface MinecraftApiStackProps extends cdk.StackProps {
@@ -24,6 +27,13 @@ export interface MinecraftApiStackProps extends cdk.StackProps {
 export class MinecraftApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: MinecraftApiStackProps) {
     super(scope, id, props);
+
+    // Written by the MinecraftServer stack; resolved by CloudFormation at deploy
+    // time, so the stacks stay decoupled (no cross-stack exports).
+    const subnetId = ssm.StringParameter.valueForStringParameter(
+      this,
+      `${SSM_CONFIG_PATH}/subnet-id`
+    );
 
     const workerLogGroup = new logs.LogGroup(this, "WorkerLogGroup", {
       logGroupName: "/aws/lambda/minecraft-discord-worker",
@@ -64,10 +74,17 @@ export class MinecraftApiStack extends cdk.Stack {
       resources: ["*"],
     });
 
+    // The launch template's AMI is a resolve:ssm: reference, resolved with the caller's permissions.
+    const amiParameterPolicy = new iam.PolicyStatement({
+      actions: ["ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:*:parameter/aws/service/ami-amazon-linux-latest/*`],
+    });
+
     const ec2Environment = {
       INSTANCE_TAG: INSTANCE_NAME_TAG,
-      SUBNET_FILTER: "MinecraftServer/Vpc/PublicSubnet1",
+      SUBNET_ID: subnetId,
       LAUNCH_TEMPLATE_NAME,
+      DATA_VOLUME_TAG: DATA_VOLUME_NAME_TAG,
       MINECRAFT_PORT: String(props.minecraftPort),
       SERVER_FQDN: props.serverFqdn,
       INSTANCE_TYPES: JSON.stringify(props.instanceTypes),
@@ -92,6 +109,7 @@ export class MinecraftApiStack extends cdk.Stack {
     serverManagement.addToRolePolicy(ec2Policy);
     serverManagement.addToRolePolicy(cloudwatchPolicy);
     serverManagement.addToRolePolicy(ssmRunPolicy);
+    serverManagement.addToRolePolicy(amiParameterPolicy);
 
     // ── Worker Lambda (calls server-management logic + posts Discord follow-up) ──
     const worker = new NodejsFunction(this, "DiscordWorker", {
@@ -110,6 +128,7 @@ export class MinecraftApiStack extends cdk.Stack {
     worker.addToRolePolicy(ec2Policy);
     worker.addToRolePolicy(cloudwatchPolicy);
     worker.addToRolePolicy(ssmRunPolicy);
+    worker.addToRolePolicy(amiParameterPolicy);
 
     // ── Handler Lambda (signature verification + command routing) ──────
     const handler = new NodejsFunction(this, "DiscordHandler", {

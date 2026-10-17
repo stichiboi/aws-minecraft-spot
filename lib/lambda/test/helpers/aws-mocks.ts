@@ -15,7 +15,7 @@ export const mockConfig = {
   cw: { send: mockCwSend },
   ssm: { send: mockSsmSend },
   INSTANCE_TAG: "MinecraftServer",
-  SUBNET_FILTER: "MinecraftServer/Vpc/PublicSubnet1",
+  SUBNET_ID: "subnet-1",
   LAUNCH_TEMPLATE_NAME: "MinecraftServer",
   MINECRAFT_PORT: 25565,
   SERVER_FQDN: "mc.example.com",
