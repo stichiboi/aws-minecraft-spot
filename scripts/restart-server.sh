@@ -13,9 +13,10 @@ COMMAND_ID=$(aws ssm send-command \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
   --parameters commands="[
+    \"systemctl stop minecraft-monitor.service\",
     \"systemctl restart minecraft.service\",
-    \"systemctl restart minecraft-monitor.service\",
-    \"echo 'minecraft.service and minecraft-monitor.service restarted.'\"
+    \"systemctl start minecraft-monitor.service\",
+    \"echo 'minecraft.service restarted; idle monitor was paused so it did not treat the stop as a crash.'\"
   ]" \
   --query 'Command.CommandId' \
   --output text)

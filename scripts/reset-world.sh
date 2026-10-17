@@ -33,8 +33,10 @@ if [[ "${CONFIRM}" != "yes" ]]; then
   exit 0
 fi
 
-# Build the list of shell commands to run via SSM
+# Build the list of shell commands to run via SSM.
+# The monitor is stopped first: it would treat the stop as a crash and shut down.
 COMMANDS=(
+  "systemctl stop minecraft-monitor.service"
   "systemctl stop minecraft.service"
   "echo 'Service stopped.'"
   "rm -rf '${SERVER_DIR}/world' '${SERVER_DIR}/world_nether' '${SERVER_DIR}/world_the_end'"
@@ -49,6 +51,7 @@ fi
 
 COMMANDS+=(
   "systemctl start minecraft.service"
+  "systemctl start minecraft-monitor.service"
   "echo 'Service started.'"
 )
 

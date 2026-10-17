@@ -17,6 +17,9 @@ if ! flock -n 9; then
   flock 9
 fi
 
+# Tells the idle monitor this stop is intentional (see monitor.sh).
+touch /run/minecraft-graceful-shutdown
+
 if ! systemctl is-active --quiet minecraft.service; then
   log "minecraft.service already inactive — nothing to do"
   exit 0

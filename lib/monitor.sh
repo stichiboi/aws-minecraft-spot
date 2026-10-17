@@ -1,6 +1,16 @@
 #!/bin/bash
-# Idle shutdown monitor: polls RCON, shuts down after inactivity.
+# Idle shutdown monitor: counts online players and invokes the stop Lambda
+# after SHUTDOWN_TIMER seconds with nobody online. Players are counted via
+# RCON /list; when RCON is disabled or unreachable it falls back to counting
+# established TCP connections on the game port.
+#
+# Env (from /etc/minecraft/instance.env): MINECRAFT_PORT, SHUTDOWN_TIMER,
+# MANAGEMENT_FUNCTION, AWS_DEFAULT_REGION.
 set -euo pipefail
+
+: "${MINECRAFT_PORT:?}" "${SHUTDOWN_TIMER:?}" "${MANAGEMENT_FUNCTION:?}" \
+  "${AWS_DEFAULT_REGION:?}"
+export AWS_DEFAULT_REGION
 
 MC_DATA="/opt/minecraft/data"
 SERVER_DIR="${MC_DATA}/server"
@@ -9,8 +19,13 @@ LOG_TAG="minecraft-monitor"
 
 CHECK_INTERVAL=30
 RCON_TIMEOUT=15
-# After this many seconds of consecutive RCON failures, treat as 0 players.
+# After this many seconds of consecutive RCON failures, fall back to TCP counting.
 RCON_FAIL_GRACE=300
+# How long to wait for the server to come up before starting the idle timer anyway.
+READY_TIMEOUT=600
+# Written by graceful-shutdown.sh; the stop Lambda should terminate us within this window.
+GRACEFUL_MARKER="/run/minecraft-graceful-shutdown"
+GRACEFUL_STOP_GRACE=300
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [${LOG_TAG}] $*"; }
 
@@ -30,48 +45,26 @@ get_prop() {
     | head -1 | cut -d'=' -f2- | tr -d '[:space:]'
 }
 
-read_rcon_config() {
-  RCON_PORT=$(get_prop "rcon.port")
-  RCON_PASSWORD=$(get_prop "rcon.password")
-  RCON_PORT="${RCON_PORT:-25575}"
-}
-
-RCON_ENABLED=$(get_prop "enable-rcon")
-if [[ "${RCON_ENABLED}" != "true" ]]; then
-  log "RCON is disabled in server.properties — idle monitor cannot run"
-  exit 0
+if [[ "$(get_prop "enable-rcon")" == "true" && -n "$(get_prop "rcon.password")" ]]; then
+  MODE="rcon"
+else
+  MODE="tcp"
+  log "RCON not configured — counting TCP connections on port ${MINECRAFT_PORT} instead"
 fi
 
-read_rcon_config
-
-if [[ -z "${RCON_PASSWORD}" ]]; then
-  log "ERROR: rcon.password not set in server.properties — exiting"
-  exit 1
-fi
-
-TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-REGION=$(curl -s -H "X-aws-ec2-metadata-token: ${TOKEN}" \
-  http://169.254.169.254/latest/meta-data/placement/region)
-export AWS_DEFAULT_REGION="${REGION}"
-
-SSM_TIMER=$(aws ssm get-parameter \
-  --name "/minecraft/config/shutdown-timer" \
-  --query "Parameter.Value" \
-  --output text 2>/dev/null || echo "")
-
-if [[ "${SSM_TIMER}" =~ ^[0-9]+$ ]] && [[ "${SSM_TIMER}" -gt 0 ]]; then
-  SHUTDOWN_TIMER="${SSM_TIMER}"
+if [[ "${SHUTDOWN_TIMER}" =~ ^[0-9]+$ ]] && [[ "${SHUTDOWN_TIMER}" -gt 0 ]]; then
+  :
 else
   SHUTDOWN_TIMER=900
 fi
-
 log "Idle shutdown timer: ${SHUTDOWN_TIMER}s ($(( SHUTDOWN_TIMER / 60 ))m)"
 
-# Returns player count (>= 0) or -1 if RCON is unreachable
+# Prints player count (>= 0) or -1 if RCON is unreachable
 rcon_player_count() {
-  local count
-  count=$(timeout "${RCON_TIMEOUT}" python3 "${RCON_HELPER}" "${RCON_PORT}" "${RCON_PASSWORD}" 2>/dev/null) || {
+  local port password count
+  port=$(get_prop "rcon.port")
+  password=$(get_prop "rcon.password")
+  count=$(timeout "${RCON_TIMEOUT}" python3 "${RCON_HELPER}" "${port:-25575}" "${password}" 2>/dev/null) || {
     echo "-1"
     return 0
   }
@@ -82,10 +75,46 @@ rcon_player_count() {
   fi
 }
 
+tcp_player_count() {
+  ss -Htn state established "( sport = :${MINECRAFT_PORT} )" | wc -l | tr -d ' '
+}
+
+server_ready() {
+  if [[ "${MODE}" == "rcon" ]]; then
+    [[ "$(rcon_player_count)" != "-1" ]]
+  else
+    ss -Hltn "( sport = :${MINECRAFT_PORT} )" | grep -q .
+  fi
+}
+
+# Sets PLAYERS to the current count, or -1 while RCON is failing within the grace period.
+rcon_fail_since=0
+measure_players() {
+  if [[ "${MODE}" == "tcp" ]]; then
+    PLAYERS=$(tcp_player_count)
+    return
+  fi
+  PLAYERS=$(rcon_player_count)
+  if [[ "${PLAYERS}" != "-1" ]]; then
+    rcon_fail_since=0
+    return
+  fi
+  local now fail_elapsed
+  now=$(date +%s)
+  [[ "${rcon_fail_since}" -eq 0 ]] && rcon_fail_since="${now}"
+  fail_elapsed=$(( now - rcon_fail_since ))
+  if [[ "${fail_elapsed}" -lt "${RCON_FAIL_GRACE}" ]]; then
+    log "WARN: RCON unreachable — grace ${fail_elapsed}s/${RCON_FAIL_GRACE}s"
+    return
+  fi
+  PLAYERS=$(tcp_player_count)
+  log "WARN: RCON unreachable for ${fail_elapsed}s — using TCP connection count (${PLAYERS})"
+}
+
 do_shutdown() {
-  log "Idle timeout reached — invoking stop Lambda"
+  log "Invoking stop Lambda ${MANAGEMENT_FUNCTION}"
   timeout 120 aws lambda invoke \
-    --function-name minecraft-server-management \
+    --function-name "${MANAGEMENT_FUNCTION}" \
     --payload '{"commandName":"stop"}' \
     --cli-binary-format raw-in-base64-out \
     /tmp/monitor-lambda-response.json \
@@ -93,58 +122,54 @@ do_shutdown() {
     || log "WARN: Lambda invoke failed — instance may need manual cleanup"
 }
 
-log "Waiting for Minecraft RCON on port ${RCON_PORT}..."
-for attempt in $(seq 1 60); do
-  read_rcon_config
-  count=$(rcon_player_count)
-  if [[ "${count}" != "-1" ]]; then
-    log "RCON ready — ${count} player(s) currently online"
+log "Waiting for Minecraft to accept connections (${MODE})..."
+ready=false
+for attempt in $(seq 1 $(( READY_TIMEOUT / 10 ))); do
+  if server_ready; then
+    ready=true
     break
   fi
   sleep 10
 done
 
+if [[ "${ready}" == "true" ]]; then
+  log "Server ready"
+else
+  log "WARN: server not ready after ${READY_TIMEOUT}s — starting idle timer anyway"
+fi
+
 last_activity=$(date +%s)
-rcon_fail_since=0
 
 log "Monitor started — checking every ${CHECK_INTERVAL}s, shutting down after ${SHUTDOWN_TIMER}s idle"
 
 while true; do
-  read_rcon_config
-
-  if [[ -z "${RCON_PASSWORD}" ]]; then
-    log "ERROR: rcon.password not set — exiting"
-    exit 1
-  fi
-
   if ! systemctl is-active --quiet minecraft.service; then
-    log "minecraft.service inactive — initiating shutdown"
+    # A graceful shutdown (stop Lambda, spot reclaim) is already terminating the
+    # instance; only step in if it hasn't happened within the grace period.
+    if [[ -f "${GRACEFUL_MARKER}" ]] \
+      && (( $(date +%s) - $(stat -c %Y "${GRACEFUL_MARKER}") < GRACEFUL_STOP_GRACE )); then
+      log "minecraft.service stopped by graceful shutdown — waiting for termination"
+      sleep "${CHECK_INTERVAL}"
+      continue
+    fi
+    if [[ -f "${GRACEFUL_MARKER}" ]]; then
+      log "Instance still alive ${GRACEFUL_STOP_GRACE}s after graceful shutdown — invoking stop again"
+    else
+      log "minecraft.service inactive — initiating shutdown"
+    fi
     do_shutdown
     break
   fi
 
-  count=$(rcon_player_count)
+  measure_players
 
-  if [[ "${count}" == "-1" ]]; then
-    now=$(date +%s)
-    if [[ "${rcon_fail_since}" -eq 0 ]]; then
-      rcon_fail_since="${now}"
-    fi
-    fail_elapsed=$(( now - rcon_fail_since ))
-    if [[ "${fail_elapsed}" -lt "${RCON_FAIL_GRACE}" ]]; then
-      remaining_grace=$(( RCON_FAIL_GRACE - fail_elapsed ))
-      log "WARN: RCON unreachable — grace ${fail_elapsed}s/${RCON_FAIL_GRACE}s (${remaining_grace}s until fail-closed)"
-      sleep "${CHECK_INTERVAL}"
-      continue
-    fi
-    log "WARN: RCON unreachable for ${fail_elapsed}s — treating as no players (fail-closed)"
-    count=0
-  else
-    rcon_fail_since=0
+  if [[ "${PLAYERS}" == "-1" ]]; then
+    sleep "${CHECK_INTERVAL}"
+    continue
   fi
 
-  if [[ "${count}" -gt 0 ]]; then
-    log "${count} player(s) online — idle timer reset"
+  if [[ "${PLAYERS}" -gt 0 ]]; then
+    log "${PLAYERS} player(s) online — idle timer reset"
     last_activity=$(date +%s)
   else
     elapsed=$(( $(date +%s) - last_activity ))
@@ -152,6 +177,7 @@ while true; do
     log "No players online — idle for ${elapsed}s, shutdown in ${remaining}s"
 
     if [[ "${elapsed}" -ge "${SHUTDOWN_TIMER}" ]]; then
+      log "Idle timeout reached"
       do_shutdown
       break
     fi
