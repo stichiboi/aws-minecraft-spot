@@ -41,8 +41,6 @@ const serverStack = new MinecraftStack(app, "MinecraftServer", {
 
   instanceTypes: app.node.tryGetContext("instanceTypes") || ["r5.large"],
   volumeSize: Number(app.node.tryGetContext("volumeSize")) || 30,
-  sshKeyName: app.node.tryGetContext("sshKeyName") || undefined,
-  sshCidr: app.node.tryGetContext("sshCidr") || "0.0.0.0/0",
   minecraftPort: Number(app.node.tryGetContext("minecraftPort")) || 25565,
   hostedZoneName: app.node.tryGetContext("hostedZoneName") || "broccoli-dependence.stichiboi.com",
   serverSubdomain: app.node.tryGetContext("serverSubdomain") || "minecraft",

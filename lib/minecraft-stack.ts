@@ -19,8 +19,6 @@ export interface MinecraftStackProps extends cdk.StackProps {
   bucket: s3.IBucket;
   instanceTypes: string[];
   volumeSize: number;
-  sshKeyName?: string;
-  sshCidr: string;
   minecraftPort: number;
   hostedZoneName: string;
   serverSubdomain: string;
@@ -56,6 +54,7 @@ export class MinecraftStack extends cdk.Stack {
     const sg = new ec2.SecurityGroup(this, "ServerSg", {
       vpc,
       allowAllOutbound: true,
+      // Changing the description replaces the security group; keep it as-is.
       description: "Minecraft server - game port + SSH",
     });
 
@@ -63,12 +62,6 @@ export class MinecraftStack extends cdk.Stack {
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(props.minecraftPort),
       "Minecraft game traffic"
-    );
-
-    sg.addIngressRule(
-      ec2.Peer.ipv4(props.sshCidr),
-      ec2.Port.tcp(22),
-      "SSH access"
     );
 
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.icmpPing(), "Allow ping");
@@ -213,9 +206,6 @@ export class MinecraftStack extends cdk.Stack {
       role,
       userData,
       securityGroup: sg,
-      keyPair: props.sshKeyName
-        ? ec2.KeyPair.fromKeyPairName(this, "SshKeyPair", props.sshKeyName)
-        : undefined,
       blockDevices: [
         {
           deviceName: "/dev/xvda",
