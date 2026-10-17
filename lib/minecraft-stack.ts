@@ -13,6 +13,7 @@ import {
   LAUNCH_TEMPLATE_NAME,
   SERVER_MANAGEMENT_FUNCTION_NAME,
   SSM_CONFIG_PATH,
+  SSM_SECRETS_PATH,
 } from "./constants";
 
 export interface MinecraftStackProps extends cdk.StackProps {
@@ -188,6 +189,7 @@ export class MinecraftStack extends cdk.Stack {
         resources: [
           `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}`,
           `arn:aws:ssm:${this.region}:${this.account}:parameter${configPath}/*`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${SSM_SECRETS_PATH}/*`,
         ],
       })
     );

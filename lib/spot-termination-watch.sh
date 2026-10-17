@@ -7,6 +7,7 @@ LOG_TAG="spot-termination-watch"
 POLL_INTERVAL=5
 IMDS="http://169.254.169.254"
 GRACEFUL="/opt/minecraft/graceful-shutdown.sh"
+NOTIFY="/opt/minecraft/notify.sh"
 RCON_HELPER="/opt/minecraft/rcon_query.py"
 SERVER_PROPS="/opt/minecraft/data/server/server.properties"
 
@@ -44,8 +45,10 @@ while true; do
   if [[ -n "${TERMINATION}" ]]; then
     log "Spot termination notice received (deadline: ${TERMINATION})"
     warn_players
+    "${NOTIFY}" "⚠️ **AWS is reclaiming the spot instance** — saving the world and shutting down. Use \`/start\` to bring it back." &
     "${GRACEFUL}" || log "WARN: graceful shutdown returned non-zero"
     log "Graceful shutdown complete — waiting for instance termination"
+    wait || true
     exit 0
   fi
 

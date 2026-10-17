@@ -210,3 +210,8 @@ tasks:
     desc: Register /start /stop /status slash commands with Discord (run once after creating the app)
     cmds:
       - npx ts-node --prefer-ts-exts discord/register-commands.ts
+
+  set-discord-webhook:
+    desc: "Store the Discord channel webhook for server notifications (task set-discord-webhook -- <url> | --delete)"
+    cmds:
+      - bash scripts/set-discord-webhook.sh {{.CLI_ARGS}}

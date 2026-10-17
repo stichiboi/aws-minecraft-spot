@@ -163,7 +163,7 @@ function formatForDiscord(
 ): string {
   switch (result.status) {
     case "started":
-      return `🚀 **Server is starting!**\n> Instance: \`${result.instanceId}\` (${result.instanceType})\n> Connect: \`${result.fqdn}:${result.port}\``;
+      return `🚀 **Server is starting!**\n> Instance: \`${result.instanceId}\` (${result.instanceType})\n> Connect: \`${result.fqdn}:${result.port}\`\n> ⏳ Boot takes a few minutes.`;
     case "already_running":
       return `⚠️ Instance \`${result.instanceId}\` is already pending/running.`;
     case "volume_in_use":

@@ -5,16 +5,17 @@
 # established TCP connections on the game port.
 #
 # Env (from /etc/minecraft/instance.env): MINECRAFT_PORT, SHUTDOWN_TIMER,
-# MANAGEMENT_FUNCTION, AWS_DEFAULT_REGION.
+# MANAGEMENT_FUNCTION, AWS_DEFAULT_REGION, FQDN.
 set -euo pipefail
 
 : "${MINECRAFT_PORT:?}" "${SHUTDOWN_TIMER:?}" "${MANAGEMENT_FUNCTION:?}" \
-  "${AWS_DEFAULT_REGION:?}"
+  "${AWS_DEFAULT_REGION:?}" "${FQDN:?}"
 export AWS_DEFAULT_REGION
 
 MC_DATA="/opt/minecraft/data"
 SERVER_DIR="${MC_DATA}/server"
 RCON_HELPER="/opt/minecraft/rcon_query.py"
+NOTIFY="/opt/minecraft/notify.sh"
 LOG_TAG="minecraft-monitor"
 
 CHECK_INTERVAL=30
@@ -134,6 +135,7 @@ done
 
 if [[ "${ready}" == "true" ]]; then
   log "Server ready"
+  "${NOTIFY}" "✅ **Server is ready** — connect to \`${FQDN}\`"
 else
   log "WARN: server not ready after ${READY_TIMEOUT}s — starting idle timer anyway"
 fi
@@ -156,6 +158,7 @@ while true; do
       log "Instance still alive ${GRACEFUL_STOP_GRACE}s after graceful shutdown — invoking stop again"
     else
       log "minecraft.service inactive — initiating shutdown"
+      "${NOTIFY}" "⚠️ **Minecraft stopped unexpectedly** — shutting the server down. Check \`task logs\` next time it's up."
     fi
     do_shutdown
     break
@@ -178,6 +181,7 @@ while true; do
 
     if [[ "${elapsed}" -ge "${SHUTDOWN_TIMER}" ]]; then
       log "Idle timeout reached"
+      "${NOTIFY}" "💤 No players for $(( SHUTDOWN_TIMER / 60 )) min — stopping the server. Use \`/start\` to bring it back."
       do_shutdown
       break
     fi
