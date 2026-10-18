@@ -1,5 +1,7 @@
+export type CommandName = "start" | "stop" | "status" | "restart";
+
 export interface WorkerPayload {
-  commandName: "start" | "stop" | "status";
+  commandName: CommandName;
   interactionToken: string;
   applicationId: string;
   instanceType?: string;
@@ -26,6 +28,13 @@ export type StopResult =
       gracefulLog?: string;
     }
   | { status: "already_terminating"; instanceId: string }
+  | { status: "not_found" };
+
+/** Restarts minecraft.target on the running instance. The EC2 instance stays up. */
+export type RestartResult =
+  | { status: "restarted"; instanceId: string }
+  | { status: "not_running"; instanceId: string; instanceState: string }
+  | { status: "restart_failed"; instanceId: string; log: string }
   | { status: "not_found" };
 
 export type McStatus = "ready" | "starting" | "offline" | "unknown";
@@ -68,4 +77,4 @@ export type StatusResult =
       statusChecksInitializing?: boolean;
     };
 
-export type CommandResult = StartResult | StopResult | StatusResult;
+export type CommandResult = StartResult | StopResult | StatusResult | RestartResult;

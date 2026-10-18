@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 /**
- * Registers /start, /stop, /status as global Discord application commands.
+ * Registers global Discord application commands.
  * Run once after creating your Discord application.
  *
  * Usage: npx ts-node discord/register-commands.ts
@@ -43,6 +43,10 @@ const commands = [
   {
     name: "status",
     description: "Check the Minecraft server status",
+  },
+  {
+    name: "restart",
+    description: "Restart the Minecraft process (the EC2 instance stays up)",
   },
 ];
 

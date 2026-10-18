@@ -207,7 +207,7 @@ tasks:
       - bash scripts/reset-world.sh {{.INSTANCE_ID}}
 
   register-discord-commands:
-    desc: Register /start /stop /status slash commands with Discord (run once after creating the app)
+    desc: Register commands with Discord (run once after creating the app, and again after adding a command)
     cmds:
       - npx ts-node --prefer-ts-exts discord/register-commands.ts
 

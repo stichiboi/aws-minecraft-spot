@@ -64,7 +64,7 @@ export async function runSsmShellCommand(
   return { status: "TimedOut", stdout: "", stderr: "timed out waiting for SSM result" };
 }
 
-function formatSsmOutput(stdout: string, stderr: string): string {
+export function formatSsmOutput(stdout: string, stderr: string): string {
   return [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
 }
 

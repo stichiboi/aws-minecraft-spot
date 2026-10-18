@@ -12,6 +12,15 @@ The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) inste
 - Boot scripts other than the bootstrap live in S3 `tools/` (uploaded by `upload-server-config.sh`), so editing them doesn't touch the launch template.
 - On stop: Lambda runs graceful-shutdown via SSM → cancels spot request → terminates instance → volume becomes `available`.
 
+### Restart vs stop (do not unify them)
+
+All services that run with the server are grouped under `minecraft.target`. Details and rationale: README "Restart vs stop on the instance".
+
+- **Restart (boot, `/restart`, `task sync-*`, reset-world) acts on `minecraft.target`.** The idle monitor treats "game down" as a crash and terminates the instance. A target restart stops the monitor before the game and brings it back after, so no script names individual services. A new companion service gets `PartOf=minecraft.target` and is added to the target's `Wants=`/`After=`. Nothing else changes.
+- **Stop for termination (stop Lambda, spot reclaim) acts on `minecraft.service` only.** `graceful-shutdown.sh` writes `/run/minecraft-graceful-shutdown`, then stops the game. The monitor keeps running on purpose: it waits on the marker and calls the stop Lambda again if the instance is still up after 5 minutes. Stopping the target here would remove that safety net and kill the spot watcher, which is running the script.
+- **The target uses `Wants=`, never `Requires=`.** With `Requires=`, stopping `minecraft.service` alone would stop the whole target through `PartOf=`.
+- **Saving is the unit's job.** `ExecStop=rcon-stop.sh` runs RCON `save-all` and `stop` on every stop path, with SIGTERM as the fallback. Don't add RCON calls to callers.
+
 ## File Map
 
 | Path | Purpose |
@@ -21,10 +30,11 @@ The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) inste
 | `lib/minecraft-bucket-stack.ts` | CDK stack: S3 bucket for mods |
 | `lib/user-data.sh` | EC2 user-data: installs the boot bootstrap as a cloud-init per-boot hook |
 | `lib/boot-bootstrap.sh` | Embedded per-boot hook: downloads `tools/per-boot.sh` from S3 and runs it; self-terminates on failure |
-| `lib/per-boot.sh` | EC2 boot script (every start, fetched from S3 `tools/`): Java, volume attach/mount, DNS, S3 sync, systemd units; on failure uploads log, notifies, terminates |
+| `lib/per-boot.sh` | EC2 boot script (every start, fetched from S3 `tools/`): Java, volume attach/mount, DNS, S3 sync, systemd units grouped under `minecraft.target` (restart/stop the target, never individual services); on failure uploads log, notifies, terminates |
 | `lib/start.sh` | Unified server launch script (`java @jvm-args.txt`, heap = `HEAP_PERCENT`% of RAM unless jvm-args.txt sets `-Xmx`; uploaded to S3 `tools/`) |
 | `lib/monitor.sh` | EC2 idle-shutdown monitor: counts players via RCON (TCP connection fallback), posts ready/idle/crash notifications, invokes stop Lambda after inactivity |
-| `lib/graceful-shutdown.sh` | EC2 graceful Minecraft stop (RCON save-all/stop, systemctl fallback) — invoked by Lambda via SSM and by spot watcher; leaves a marker so the monitor doesn't treat it as a crash |
+| `lib/rcon-stop.sh` | `ExecStop` for `minecraft.service`: RCON `save-all` then `stop`; exits 0 so systemd SIGTERMs the JVM if RCON is unavailable |
+| `lib/graceful-shutdown.sh` | Instance-going-away stop (stop Lambda, spot watcher): leaves the monitor marker, then `systemctl stop minecraft.service` (the unit's `ExecStop` does the save) |
 | `lib/spot-termination-watch.sh` | EC2 spot capacity-reclaim watcher: polls IMDS every 5 s, warns players, notifies, runs graceful-shutdown.sh on notice |
 | `lib/notify.sh` | EC2 Discord notifier: posts to the webhook in SSM `/minecraft/secrets/discord-webhook-url`; no-op if unset, never fails the caller |
 | `lib/rcon_query.py` | Minimal RCON client used by monitor.sh (uploaded to S3, pulled at boot) |
@@ -35,7 +45,7 @@ The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) inste
 | `scripts/upload-mods.sh` | Upload mod JARs and mod configs to S3 |
 | `scripts/sync-server.sh` | Sync server files from S3 to running instance via SSM (no restart) |
 | `scripts/sync-mods.sh` | Sync mods + mod configs from S3 to running instance via SSM (no restart) |
-| `scripts/restart-server.sh` | Restart minecraft.service on instance via SSM, pausing the idle monitor (shared by sync tasks) |
+| `scripts/restart-server.sh` | Restart `minecraft.target` on the instance via SSM (shared by sync tasks) |
 | `scripts/lib/ssm-run.sh` | Sourced helper: `ssm_run` (send + poll + print output) and `json_array` — used by every SSM script |
 | `scripts/set-discord-webhook.sh` | Store/delete the Discord notification webhook URL as an SSM SecureString |
 | `scripts/start-server.sh` | Invoke `minecraft-server-management` Lambda (start) |
@@ -52,9 +62,10 @@ The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) inste
 | `resources/server/` | Gitignored: jvm-args.txt, server.properties (uploaded to S3 `server/` prefix) |
 | `Taskfile.yml` | All runnable tasks — source of truth for workflow |
 | `lib/minecraft-api-stack.ts` | CDK stack: API Gateway + Lambda functions |
-| `lib/lambda/server-management.ts` | Lambda entry: routes start/stop/status commands — directly invocable |
+| `lib/lambda/server-management.ts` | Lambda entry: routes commands — directly invocable |
 | `lib/lambda/start-server.ts` | EC2 Fleet start logic |
 | `lib/lambda/stop-server.ts` | Graceful shutdown + spot cancel + terminate |
+| `lib/lambda/restart-server.ts` | SSM `systemctl restart minecraft.target` (instance stays up); same unit per-boot starts |
 | `lib/lambda/get-status.ts` | Instance lookup, port probe, CloudWatch + SSM stats |
 | `lib/lambda/config.ts` | Shared env vars and AWS SDK clients |
 | `lib/lambda/utils/ec2.ts` | EC2 helpers: getInstance, getDataVolumeState, isInstanceInitializing |
@@ -65,7 +76,7 @@ The server uses **EC2 Fleet** (`instant` type, `price-capacity-optimized`) inste
 | `lib/lambda/test/` | Vitest unit tests for server-management modules |
 | `lib/lambda/discord-handler.ts` | Lambda: Ed25519 signature verification + command routing |
 | `lib/lambda/discord-worker.ts` | Lambda: calls server-management + posts Discord follow-up |
-| `discord/register-commands.ts` | One-time script: registers /start /stop /status with Discord |
+| `discord/register-commands.ts` | One-time script: registers commands with Discord |
 | `discord/README.md` | Setup guide: create Discord app, get credentials, deploy |
 | `.env.example` | Template for required Discord credentials |
 

@@ -161,7 +161,7 @@ If RCON is disabled in `server.properties`, the idle monitor falls back to count
 
 ## Discord bot
 
-Slash commands (`/start`, `/stop`, `/status`) that work without AWS credentials. See [discord/README.md](discord/README.md) for setup.
+Slash commands that work without AWS credentials. See [discord/README.md](discord/README.md) for setup, and [discord/register-commands.ts](discord/register-commands.ts) for the command list and help.
 
 ### Notifications
 
@@ -193,7 +193,7 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 - **Small root volume** (8GB gp3) on the instance for the OS only.
 - **S3** - `server/`, `mods/`, `mods-config/`, `server-bin/`, `tools/`; `upload-mods.sh` pushes local `resources/` into the bucket.
 - **Route53** - A record updated on **every boot** by the per-boot script (no Elastic IP).
-- **Lambda + API Gateway** - start/stop/status logic lives in `lib/lambda/server-management.ts`; bots call this instead of AWS APIs directly. The Discord handler and worker Lambdas are deployed alongside it.
+- **Lambda + API Gateway** - command logic lives in `lib/lambda/server-management.ts`; bots call this instead of AWS APIs directly. The Discord handler and worker Lambdas are deployed alongside it.
 - **IMDSv2** - instance scripts use the metadata token API for instance id, public IP, and region.
 
 ## Boot scripts (CDK → EC2)
@@ -207,6 +207,24 @@ Infrastructure is TypeScript (`lib/minecraft-stack.ts`); **on the instance** beh
 | `lib/per-boot.sh`       | Every boot (fetched from S3)         | Reads config from SSM, installs Java, pulls the other `tools/` scripts, attaches & mounts the data volume, updates DNS, syncs server files/mods from S3, writes the systemd units, starts Minecraft. |
 
 Only the small bootstrap is baked into the launch template. Everything else lives in S3 `tools/` (uploaded by `task upload-server-config`, which `task deploy-instance` runs), so script changes apply on the next start without replacing the launch template.
+
+### Restart vs stop on the instance
+
+`per-boot.sh` puts every service that runs with the server (the game, the idle monitor, the spot watcher, the backup watcher) under one systemd target, `minecraft.target`. Restarting the server and stopping it touch different units on purpose:
+
+| Action | What it runs | Idle monitor |
+| --- | --- | --- |
+| Boot, `/restart`, `task sync-*` | `systemctl restart minecraft.target` | Stopped before the game, started again after it |
+| `task reset-world` | `systemctl stop minecraft.target`, then `start` | Same: stopped first, started again after the game |
+| `/stop`, spot reclaim (`graceful-shutdown.sh`) | Writes `/run/minecraft-graceful-shutdown`, then `systemctl stop minecraft.service` | Keeps running |
+
+**Why restart uses the target.** The idle monitor reads "game is down" as a crash and terminates the instance. Restarting the target stops the monitor before the game and starts it again after, so a restart never trips it. No script has to remember which helper services to pause: a new service joins by adding `PartOf=minecraft.target` and one line on the target.
+
+**Why stop leaves the monitor running.** When the instance is going away, the monitor is the safety net. It sees the game stop, finds the fresh marker file, and waits for the stop Lambda to terminate the instance. If the instance is still alive 5 minutes later, it calls the stop Lambda again, so a failed termination can't leave a spot instance billing. Stopping the target here would also stop the spot watcher, the process that runs `graceful-shutdown.sh` during a reclaim.
+
+**Why the target uses `Wants=`, not `Requires=`.** With `Requires=`, stopping `minecraft.service` on its own would stop the target and, through `PartOf=`, every other service. The stop path above depends on that not happening.
+
+Both paths save the world the same way: `minecraft.service` has `ExecStop=rcon-stop.sh` (RCON `save-all`, then `stop`), and SIGTERM is the fallback if RCON is unavailable.
 
 If `per-boot.sh` fails, it uploads its log to `s3://BUCKET/logs/boot-failures/`, posts a Discord notification (if configured) and terminates the instance, so a broken boot never keeps a spot instance running.
 

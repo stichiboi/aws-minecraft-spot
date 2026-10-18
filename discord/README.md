@@ -1,6 +1,6 @@
 # Discord Bot Setup
 
-This sets up `/start`, `/stop`, and `/status` slash commands that control the Minecraft server without needing AWS credentials.
+Sets up `/start`, `/stop`, `/status`, and `/restart` slash commands, so that you can control the Minecraft server without needing AWS credentials.
 
 ## Prerequisites
 
@@ -50,7 +50,7 @@ Note the `DiscordEndpoint` output URL printed at the end.
 task register-discord-commands
 ```
 
-This registers `/start`, `/stop`, `/status` as global commands. Global commands take up to 1 hour to propagate.
+Global commands take up to 1 hour to propagate. You need to re-run it after adding a command.
 
 ### 6. Invite the bot to your server
 
@@ -66,6 +66,7 @@ In any channel where the bot has access:
 - `/status` — shows current server state
 - `/start` — launches the EC2 instance
 - `/stop` — saves the world, cancels the spot request and terminates the instance
+- `/restart` — restarts the Minecraft process on the running instance; the EC2 instance stays up
 
 ### 8. (Optional) Channel notifications
 

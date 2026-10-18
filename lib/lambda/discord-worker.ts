@@ -181,7 +181,20 @@ function formatForDiscord(
     }
     case "already_terminating":
       return `⭕ Instance \`${result.instanceId}\` is already terminating.`;
+    case "restarted":
+      return `🔄 **Minecraft restarted** on \`${result.instanceId}\`.\n> The EC2 instance stays up. The world takes a minute to come back.`;
+    case "not_running":
+      return `⚠️ Instance \`${result.instanceId}\` is \`${result.instanceState}\`. The Minecraft process can only be restarted while the instance is running.`;
+    case "restart_failed": {
+      const logBlock = result.log
+        ? `\n\`\`\`\n${result.log.slice(0, 1500)}\n\`\`\``
+        : "";
+      return `⚠️ **Restart failed** on \`${result.instanceId}\`.${logBlock}`;
+    }
     case "not_found":
+      if (commandName === "restart") {
+        return "⭕ No running instance found. Use `/start` to launch the server.";
+      }
       return commandName === "stop"
         ? "⭕ No running instance found."
         : "⭕ **Server is offline.** No instance found.";

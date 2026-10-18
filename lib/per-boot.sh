@@ -233,18 +233,42 @@ chmod 644 /etc/minecraft/instance.env
 chown -R "${MC_USER}:${MC_USER}" "${MC_DATA}"
 
 # ── systemd units ─────────────────────────────────────────────────
+# minecraft.target groups every unit that runs with the server. Boot and
+# /restart both restart the target; to add a unit, list it in Wants= and After=
+# below and give it PartOf=minecraft.target. Stopping for termination
+# (graceful-shutdown.sh) stops only minecraft.service so the idle monitor keeps
+# watching; see README "Restart vs stop on the instance".
+# Wants=, not Requires=: with Requires=, `systemctl stop minecraft.service`
+# (what graceful-shutdown.sh runs) would stop the target and, through PartOf=,
+# every other member, including the spot watcher running that script.
+# After= makes `systemctl restart minecraft.target` return only once members are
+# back up. Stop order is the reverse of After=, so the idle monitor stops before
+# the game process and does not see the gap as a crash.
+cat > /etc/systemd/system/minecraft.target <<'UNIT'
+[Unit]
+Description=Minecraft server
+Wants=minecraft.service minecraft-monitor.service spot-termination-watch.service simplebackups-s3-watcher.service
+After=minecraft.service minecraft-monitor.service spot-termination-watch.service simplebackups-s3-watcher.service
+UNIT
+
 cat > /etc/systemd/system/minecraft.service <<'UNIT'
 [Unit]
 Description=Minecraft Server
 After=network.target
+PartOf=minecraft.target
 
 [Service]
 Type=simple
 User=minecraft
 WorkingDirectory=/opt/minecraft/data/server
 ExecStart=/opt/minecraft/data/server/start.sh
+# "-" so a failed RCON attempt still lets systemd SIGTERM the JVM.
+ExecStop=-/opt/minecraft/rcon-stop.sh
 Restart=on-failure
 RestartSec=10
+# RCON stop exits 0; SIGTERM exits 143. Covers rcon-stop.sh plus the save.
+SuccessExitStatus=143
+TimeoutStopSec=120
 StandardOutput=journal
 StandardError=journal
 
@@ -256,6 +280,7 @@ cat > /etc/systemd/system/minecraft-monitor.service <<'UNIT'
 [Unit]
 Description=Minecraft idle shutdown monitor
 After=minecraft.service
+PartOf=minecraft.target
 
 [Service]
 Type=simple
@@ -275,6 +300,7 @@ cat > /etc/systemd/system/spot-termination-watch.service <<'UNIT'
 [Unit]
 Description=Spot instance termination notice watcher
 After=network-online.target minecraft.service
+PartOf=minecraft.target
 
 [Service]
 Type=simple
@@ -294,6 +320,7 @@ cat > /etc/systemd/system/simplebackups-s3-watcher.service <<'UNIT'
 [Unit]
 Description=Upload SimpleBackups zips to S3
 After=network-online.target
+PartOf=minecraft.target
 ConditionPathIsMountPoint=/opt/minecraft/data
 
 [Service]
@@ -312,9 +339,6 @@ systemctl daemon-reload
 systemctl enable minecraft-monitor.service spot-termination-watch.service \
   simplebackups-s3-watcher.service
 
-systemctl restart minecraft.service
-systemctl restart minecraft-monitor.service
-systemctl restart spot-termination-watch.service
-systemctl restart simplebackups-s3-watcher.service
+systemctl restart minecraft.target
 
 echo "=== Minecraft per-boot script completed at $(date) ==="

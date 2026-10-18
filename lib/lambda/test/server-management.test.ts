@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { startServer, stopServer, getStatus } = vi.hoisted(() => ({
+const { startServer, stopServer, getStatus, restartServer } = vi.hoisted(() => ({
   startServer: vi.fn(),
   stopServer: vi.fn(),
   getStatus: vi.fn(),
+  restartServer: vi.fn(),
 }));
 
 vi.mock("../start-server", () => ({ startServer }));
 vi.mock("../stop-server", () => ({ stopServer }));
 vi.mock("../get-status", () => ({ getStatus }));
+vi.mock("../restart-server", () => ({ restartServer }));
 
 import { handler, runCommand } from "../server-management";
 
@@ -34,6 +36,12 @@ describe("server-management", () => {
       getStatus.mockResolvedValue({ status: "not_found" });
       await runCommand("status");
       expect(getStatus).toHaveBeenCalledOnce();
+    });
+
+    it("delegates restart", async () => {
+      restartServer.mockResolvedValue({ status: "restarted", instanceId: "i-1" });
+      await runCommand("restart");
+      expect(restartServer).toHaveBeenCalledOnce();
     });
   });
 

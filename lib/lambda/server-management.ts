@@ -1,9 +1,10 @@
-import type { CommandResult } from "./types";
+import type { CommandName, CommandResult } from "./types";
 import { startServer } from "./start-server";
 import { stopServer } from "./stop-server";
 import { getStatus } from "./get-status";
+import { restartServer } from "./restart-server";
 
-export type CommandName = "start" | "stop" | "status";
+export type { CommandName };
 
 export type RunCommandOptions = {
   instanceType?: string;
@@ -20,6 +21,8 @@ export async function runCommand(
       return stopServer();
     case "status":
       return getStatus();
+    case "restart":
+      return restartServer();
     default:
       throw new Error(`Unknown command: ${commandName as string}`);
   }
