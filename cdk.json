@@ -18,7 +18,7 @@
   "context": {
     "amazonLinuxCpuType": "ARM_64",
     "instanceTypes": ["m7g.xlarge", "m6g.xlarge", "m8g.xlarge", "c6g.xlarge", "c7g.xlarge"],
-    "volumeSize": 30,
+    "volumeSize": 10,
     "minecraftPort": 25565,
     "hostedZoneName": "broccoli-dependence.stichiboi.com",
     "serverSubdomain": "minecraft",

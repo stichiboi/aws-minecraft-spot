@@ -189,7 +189,7 @@ The core `lib/lambda/server-management.ts` already handles all EC2 logic — new
 ## Architecture
 
 - **EC2 Fleet** (spot, `price-capacity-optimized`) — the Lambda creates an `instant` fleet with multiple instance type overrides from `cdk.json`. Instances exist only while the server is running: they are terminated on stop, and the EBS data volume is reattached on next boot. CloudFormation manages the launch template, not an instance.
-- **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`, default 30GB). Minecraft world and server files live under `/opt/minecraft/data` on this volume. If the volume is ever replaced or the stack destroyed, CloudFormation takes a final snapshot first (RemovalPolicy SNAPSHOT).
+- **Detached EBS gp3** - separate CloudFormation `AWS::EC2::Volume` (size from `cdk.json` `volumeSize`; grow it online with `aws ec2 modify-volume` + `xfs_growfs`). Minecraft world and server files live under `/opt/minecraft/data` on this volume. If the volume is ever replaced or the stack destroyed, CloudFormation takes a final snapshot first (RemovalPolicy SNAPSHOT).
 - **Small root volume** (8GB gp3) on the instance for the OS only.
 - **S3** - `server/`, `mods/`, `mods-config/`, `server-bin/`, `tools/`; `upload-mods.sh` pushes local `resources/` into the bucket.
 - **Route53** - A record updated on **every boot** by the per-boot script (no Elastic IP).

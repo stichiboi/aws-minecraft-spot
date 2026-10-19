@@ -85,7 +85,9 @@ export class MinecraftStack extends cdk.Stack {
     // ── Standalone EBS Data Volume ──────────────────────────────────
     // SNAPSHOT: a replacement (AZ change, construct rename) or stack delete
     // leaves a final snapshot of the world instead of deleting it.
-    const dataVolume = new ec2.Volume(this, "DataVolume", {
+    // `size` is modified in place and EBS cannot shrink, so a smaller volume
+    // needs a construct rename (new empty volume; restore the world afterwards).
+    const dataVolume = new ec2.Volume(this, "WorldVolume", {
       availabilityZone: vpc.publicSubnets[0].availabilityZone,
       size: cdk.Size.gibibytes(props.volumeSize),
       volumeType: ec2.EbsDeviceVolumeType.GP3,
